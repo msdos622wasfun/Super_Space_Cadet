@@ -1,0 +1,5705 @@
+// --------------------------------- //
+// Project: Super Space Cadet
+// Start: Monday, August 29, 2016
+// IDE Version: 14.001
+//
+// Super Space Cadet v1.01
+// Copyleft 2020 by Erich Kohl
+// All Rights Reserved
+//
+// A sequel to the original "Space Cadet"
+// that I wrote on the Apple //e.
+
+// Feel free to hack away at this for
+// your own personal enjoyment.
+
+// Every comment that is in regards to
+// something that still needs to be done
+// is prefaced with a "TODO:"
+
+// Windows source code.
+
+// --------------------------------- //
+
+// Set up global constants.
+
+CONSTANT GAL_EMPTY% = 0
+CONSTANT GAL_AURORA% = 1
+CONSTANT GAL_ZYLON% = 2
+CONSTANT GAL_STARDOCK% = 3
+CONSTANT GAL_PLANET% = 4
+CONSTANT GAL_ASTEROID% = 5
+CONSTANT GAL_STAR% = 6
+
+CONSTANT GAL_NEB_EMPTY% = 0
+CONSTANT GAL_NEB_OCCUPIED% = 1
+
+CONSTANT PLANET_TYPE_1% = 1
+CONSTANT PLANET_TYPE_2% = 2
+CONSTANT PLANET_TYPE_3% = 3
+
+CONSTANT TECH_NONE% = 0
+CONSTANT TECH_PREHISTORIC% = 1
+CONSTANT TECH_PREINDUSTRIAL% = 2
+CONSTANT TECH_INDUSTRIAL% = 3
+CONSTANT TECH_MODERN% = 4
+CONSTANT TECH_SPACE% = 5
+
+CONSTANT SYS_PROP_STANDARD% = 1
+CONSTANT SYS_PROP_INTERSTELLAR% = 2
+CONSTANT SYS_PROP_HYPER% = 3
+CONSTANT SYS_LASERS% = 4
+CONSTANT SYS_MISSILES% = 5
+CONSTANT SYS_SMART% = 6
+CONSTANT SYS_CLOAK% = 7
+CONSTANT SYS_COMPUTER% = 8
+CONSTANT SYS_SCANNERS% = 9
+CONSTANT SYS_COMM% = 10
+CONSTANT SYS_LIFE% = 11
+
+CONSTANT WEAPON_LASER% = 1
+CONSTANT WEAPON_MISSILE% = 2
+CONSTANT WEAPON_SMART% = 3
+
+CONSTANT GAME_OVER_STARSHIP_DESTROYED% = 1
+CONSTANT GAME_OVER_NO_FUEL% = 2
+CONSTANT GAME_OVER_NO_POWER% = 3
+CONSTANT GAME_OVER_NO_LIFE_SUPPORT% = 4
+CONSTANT GAME_OVER_ALL_PROP_FAT_DAM% = 5
+CONSTANT GAME_OVER_LIFE_SUPPORT_FAT_DAM% = 6
+CONSTANT GAME_OVER_ALL_CREW_KILLED% = 7
+CONSTANT GAME_OVER_ALL_PLANETS_DESTROYED% = 8
+CONSTANT GAME_OVER_ALL_STARDOCKS_DESTROYED% = 9
+
+// Set up global UDTs.
+
+TYPE T_PLAYER_POS
+	xCluster%
+	yCluster%
+	xSector%
+	ySector%
+ENDTYPE
+
+TYPE T_ZYLON
+	xCluster%
+	yCluster%
+	xSector%
+	ySector%
+	fuel%
+	shieldsMaxCap#
+	shields#
+	structInt%
+	pulseUnits%
+	particleBeam%
+	cloakEnergy%
+	cloakEngaged%
+	canHack%
+ENDTYPE
+
+TYPE T_STARDOCK
+	xCluster%
+	yCluster%
+	xSector%
+	ySector%
+	shields%
+	structInt%
+	repairCap%
+	refuelCap%
+ENDTYPE
+
+TYPE T_ATMOSPHERE
+	nitrogen%
+	oxygen%
+	co2%
+	hydrogen%
+	helium%
+	methane%
+ENDTYPE
+
+TYPE T_PLANET
+	xCluster%
+	yCluster%
+	xSector%
+	ySector%
+	planetType%
+	population%
+	casualties%
+	techLevel%
+	atmosphere AS T_ATMOSPHERE
+ENDTYPE
+
+// Set up global variables.
+
+GLOBAL galaxy%[]
+GLOBAL galaxyNebula%[]
+GLOBAL galaxySymbols$[]
+GLOBAL galaxyDescriptStrings$[]
+GLOBAL galaxyScanRecords$[]
+GLOBAL playerName$
+GLOBAL stardockPasscode$
+GLOBAL selfDestructPasscode$
+GLOBAL starDate%					// This will start at 10000, but will actually be 100 because we'll divide by 100 to get a decimal.
+GLOBAL playerPos AS T_PLAYER_POS
+GLOBAL fuel%
+GLOBAL powerMain%
+GLOBAL powerAux%
+GLOBAL shields%
+GLOBAL structInt%
+GLOBAL laserUnits%
+GLOBAL missiles%
+GLOBAL smartBomb%
+GLOBAL cloakEnergy%
+GLOBAL cloakEngaged%
+GLOBAL lifeSupportUnits%
+GLOBAL lifeSupportUnitsReserve%
+GLOBAL systems%[]
+GLOBAL crewMembers%
+GLOBAL casualties%
+GLOBAL zylons[] AS T_ZYLON
+GLOBAL zylonsTotal%
+GLOBAL zylonsRemaining%
+GLOBAL stardocks[] AS T_STARDOCK
+GLOBAL stardocksTotal%
+GLOBAL stardocksRemaining%
+GLOBAL planets[] AS T_PLANET
+GLOBAL planetsTotal%
+GLOBAL planetsInhabited%
+GLOBAL planetsDestroyed%
+GLOBAL totalAsteroidPatches%
+GLOBAL totalNebulaPatches%
+GLOBAL totalStars%
+GLOBAL skill%
+GLOBAL gameOverTrigger%
+GLOBAL selfDestroyed%
+GLOBAL showFunnyPauseComment%
+GLOBAL loadSuccess%
+GLOBAL quote$
+
+DIM galaxy[21][21][31][11]				// Actual bounds usage will be 1-20, 1-20, 1-30, 1-10.
+DIM galaxyScanRecords$[21][21]			// 1-20, 1-20.
+DIM galaxyNebula[21][21][31][11]
+DIM galaxySymbols$[7]
+DIM galaxyDescriptStrings$[6]
+DIM systems[12]							// 1-11.
+
+GOSUB Begin
+GOSUB Main
+GOSUB WrapUp
+
+END
+
+SUB Begin:
+
+	LOCAL okay#
+	LOCAL returnVal#
+
+	GOSUB InitGlobals
+
+	STDCOLOR 10, 0
+
+	okay = SHELLCMD("cmd /c cls", TRUE, FALSE, returnVal)
+
+	STDOUT "\n"
+	STDOUT "\t ***  *   * ****  ***** ****\n"
+	STDOUT "\t*   * *   * *   * *     *   *\n"
+	STDOUT "\t*     *   * *   * *     *   *\n"
+	STDOUT "\t ***  *   * ****  ****  ****\n"
+	STDOUT "\t    * *   * *     *     * *\n"
+	STDOUT "\t*   * *   * *     *     *  *\n"
+	STDOUT "\t ***   ***  *     ***** *   *\n"
+	STDOUT "\n"
+	STDOUT "\t\t ***  ****    *    ***  *****\n"
+	STDOUT "\t\t*   * *   *  * *  *   * *\n"
+	STDOUT "\t\t*     *   * *   * *     *\n"
+	STDOUT "\t\t ***  ****  ***** *     ****\n"
+	STDOUT "\t\t    * *     *   * *     *\n"
+	STDOUT "\t\t*   * *     *   * *   * *\n"
+	STDOUT "\t\t ***  *     *   *  ***  *****\n"
+	STDOUT "\n"
+	STDOUT "\t\t\t ***    *   ****  ***** *****\n"
+	STDOUT "\t\t\t*   *  * *  *   * *       *\n"
+	STDOUT "\t\t\t*     *   * *   * *       *\n"
+	STDOUT "\t\t\t*     ***** *   * ****    *\n"
+	STDOUT "\t\t\t*     *   * *   * *       *\n"
+	STDOUT "\t\t\t*   * *   * *   * *       *\n"
+	STDOUT "\t\t\t ***  *   * ****  *****   *\n"
+
+	STDOUT "\n PRESS ANY KEY TO CONTINUE..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+	STDOUT " Super Space Cadet v1.01\n"
+	STDOUT " Copyleft 2020 by Erich Kohl\n"
+	STDOUT " All Rights Reserved\n"
+	STDOUT "\n"
+
+ENDSUB
+
+SUB Command_Cloak:
+
+	LOCAL inputString$
+
+	IF systems[SYS_CLOAK] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CLOAKING SYSTEM IS INOPERATIVE, DEVICE UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEnergy = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CLOAKING ENERGY FULLY DEPLETED, DEVICE UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = FALSE
+		STDOUT " CLOAKING DEVICE IS CURRENTLY INACTIVE.\n"
+		STDOUT "\n"
+		REPEAT
+			STDOUT " WOULD YOU LIKE TO ENABLE IT (Y/N)? "
+			inputString$ = STDIN$()
+			inputString$ = UCASE$(TRIM$(inputString$))
+		UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+		STDOUT "\n"
+		IF LEFT$(inputString$, 1) = "Y"
+			cloakEngaged = TRUE
+			STDOUT " REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("CLOAKING DEVICE HAS BEEN ENGAGED.") + quote$ + "\n\n"
+		ENDIF
+	ELSE
+		STDOUT " CLOAKING DEVICE IS CURRENTLY ACTIVE.\n"
+		STDOUT "\n"
+		REPEAT
+			STDOUT " WOULD YOU LIKE TO DISABLE IT (Y/N)? "
+			inputString$ = STDIN$()
+			inputString$ = UCASE$(TRIM$(inputString$))
+		UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+		STDOUT "\n"
+		IF LEFT$(inputString$, 1) = "Y"
+			cloakEngaged = FALSE
+			STDOUT " REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("CLOAKING DEVICE HAS BEEN DISENGAGED.") + quote$ + "\n\n"
+		ENDIF
+	ENDIF
+
+ENDSUB
+
+SUB Command_Computer:
+
+	LOCAL subCmd$
+	LOCAL quadChoice$
+	LOCAL x1%
+	LOCAL x2%
+	LOCAL y1%
+	LOCAL y2%
+	LOCAL x%
+	LOCAL y%
+	LOCAL xRelative#
+	LOCAL yRelative#
+	LOCAL angle%
+	LOCAL a%
+
+	IF RND(9999) + 1 > systems[SYS_COMPUTER]
+		STDOUT " COMPUTER CURRENTLY UNAVAILABLE DUE TO DAMAGE; PLEASE TRY AGAIN LATER.\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " SHIP COMPUTER ON-LINE AND READY.\n\n"
+
+	STDOUT " AVAILABLE SUBCOMMANDS:\n\n"
+
+	STDOUT " (1) GALACTIC QUADRANT SCAN RECORDS\n"
+	STDOUT " (2) MAP OF THE GALAXY -- QUADRANT LAYOUTS\n"
+	STDOUT " (3) MAP OF THE GALAXY -- CLUSTER PAIRS WITHIN QUADRANT\n"
+	STDOUT " (4) LOCATION OF ALL STARDOCKS\n"
+	STDOUT " (5) MISSILE TRAJECTORY CALCULATOR\n"
+	STDOUT " (6) POLAR ANGLE DIAGRAM\n"
+	STDOUT " (7) CANCEL\n\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER DESIRED SUBCOMMAND: "
+			subCmd$ = STDIN$()
+			subCmd$ = TRIM$(subCmd$)
+		UNTIL LEN(subCmd$) = 1
+		STDOUT "\n"
+		IF subCmd$ = "1"
+			STDOUT " PLEASE CHOOSE FROM THE FOLLOWING:\n"
+			STDOUT "\n"
+			STDOUT " (1) ALPHA QUADRANT (1, 1)-(10, 10)\n"
+			STDOUT " (2) BETA QUADRANT (11, 1)-(20, 10)\n"
+			STDOUT " (3) GAMMA QUADRANT (1, 11)-(10, 20)\n"
+			STDOUT " (4) DELTA QUADRANT (11, 11)-(20, 20)\n"
+			STDOUT "\n"
+			REPEAT
+				STDOUT " ENTER DESIRED QUADRANT: "
+				quadChoice$ = STDIN$()
+				quadChoice$ = TRIM$(quadChoice$)
+			UNTIL quadChoice$ = "1" OR quadChoice$ = "2" OR quadChoice$ = "3" OR quadChoice$ = "4"
+			STDOUT "\n"
+			IF quadChoice$ = "1"
+				x1 = 1
+				x2 = 10
+				y1 = 1
+				y2 = 10
+			ELSEIF quadChoice$ = "2"
+				x1 = 11
+				x2 = 20
+				y1 = 1
+				y2 = 10
+			ELSEIF quadChoice$ = "3"
+				x1 = 1
+				x2 = 10
+				y1 = 11
+				y2 = 20
+			ELSE
+				x1 = 11
+				x2 = 20
+				y1 = 11
+				y2 = 20
+			ENDIF
+			STDOUT " COMPUTER RECORD OF SCANS PERFORMED IN " + GetQuadrantName$(x1, y1) + " QUADRANT:\n"
+			STDOUT "\n"
+			STDOUT "      "
+			FOR x = x1 TO x2
+				STDOUT FORMAT$(2, 0, x)
+				IF x < x2 THEN STDOUT "     "
+			NEXT
+			STDOUT "\n"
+			FOR y = y1 TO y2
+				STDOUT "    ------:------:------:------:------:------:------:------:------:------\n"
+				STDOUT " " + FORMAT$(2, 0, y) + " "
+				FOR x = x1 TO x2
+					IF galaxyScanRecords$[x][y] = "ABCDEF"
+						STDCOLOR 8, 0
+						STDOUT "******"
+						STDCOLOR 10, 0
+					ELSE
+						IF MID$(galaxyScanRecords$[x][y], 0, 1) = "0"
+							STDCOLOR 10, 0
+						ELSE
+							STDCOLOR 12, 0
+						ENDIF
+						STDOUT MID$(galaxyScanRecords$[x][y], 0, 1)
+						IF MID$(galaxyScanRecords$[x][y], 1, 1) = "0"
+							STDCOLOR 10, 0
+						ELSE
+							STDCOLOR 14, 0
+						ENDIF
+						STDOUT MID$(galaxyScanRecords$[x][y], 1, 1)
+						IF MID$(galaxyScanRecords$[x][y], 2, 1) = "0"
+							STDCOLOR 10, 0
+						ELSE
+							STDCOLOR 11, 0
+						ENDIF
+						STDOUT MID$(galaxyScanRecords$[x][y], 2, 1)
+						IF MID$(galaxyScanRecords$[x][y], 3, 1) = "0"
+							STDCOLOR 10, 0
+						ELSE
+							STDCOLOR 13, 0
+						ENDIF
+						STDOUT MID$(galaxyScanRecords$[x][y], 3, 1)
+						IF MID$(galaxyScanRecords$[x][y], 4, 1) = "0"
+							STDCOLOR 10, 0
+						ELSE
+							STDCOLOR 13, 0
+						ENDIF
+						STDOUT MID$(galaxyScanRecords$[x][y], 4, 1)
+						STDCOLOR 10, 0
+						STDOUT MID$(galaxyScanRecords$[x][y], 5, 1)
+					ENDIF
+					IF x < x2 THEN STDOUT ":"
+				NEXT
+				STDOUT "\n"
+			NEXT
+			STDOUT "    ------:------:------:------:------:------:------:------:------:------\n"
+			STDOUT "\n"
+		ELSEIF subCmd$ = "2"
+			STDOUT " MAP OF GALACTIC QUADRANT REGIONS:\n"
+			STDOUT "\n"
+			STDOUT "    1  2  3  4  5  6  7  8  9 10|11 12 13 14 15 16 17 18 19 20\n"
+			STDOUT "   -----------------------------|-----------------------------\n"
+			FOR y = 1 TO 4
+				STDOUT " " + FORMAT$(2, 0, y) + "                             |\n"
+			NEXT
+			STDOUT "  5            ALPHA            |            BETA\n"
+			FOR y = 6 TO 10
+				STDOUT " " + FORMAT$(2, 0, y) + "                             |\n"
+			NEXT
+			STDOUT "   -----------------------------+-----------------------------\n"
+			FOR y = 11 TO 14
+				STDOUT " " + FORMAT$(2, 0, y) + "                             |\n"
+			NEXT
+			STDOUT " 15            GAMMA            |            DELTA\n"
+			FOR y = 16 TO 20
+				STDOUT " " + FORMAT$(2, 0, y) + "                             |\n"
+			NEXT
+			STDOUT "   -----------------------------|-----------------------------\n"
+			STDOUT "\n"
+		ELSEIF subCmd$ = "3"
+			STDOUT " PLEASE CHOOSE FROM THE FOLLOWING:\n"
+			STDOUT "\n"
+			STDOUT " (1) ALPHA QUADRANT (1, 1)-(10, 10)\n"
+			STDOUT " (2) BETA QUADRANT (11, 1)-(20, 10)\n"
+			STDOUT " (3) GAMMA QUADRANT (1, 11)-(10, 20)\n"
+			STDOUT " (4) DELTA QUADRANT (11, 11)-(20, 20)\n"
+			STDOUT "\n"
+			REPEAT
+				STDOUT " ENTER DESIRED QUADRANT: "
+				quadChoice$ = STDIN$()
+				quadChoice$ = TRIM$(quadChoice$)
+			UNTIL quadChoice$ = "1" OR quadChoice$ = "2" OR quadChoice$ = "3" OR quadChoice$ = "4"
+			STDOUT "\n"
+			IF quadChoice$ = "1"
+				x1 = 1
+				x2 = 10
+				y1 = 1
+				y2 = 10
+			ELSEIF quadChoice$ = "2"
+				x1 = 11
+				x2 = 20
+				y1 = 1
+				y2 = 10
+			ELSEIF quadChoice$ = "3"
+				x1 = 1
+				x2 = 10
+				y1 = 11
+				y2 = 20
+			ELSE
+				x1 = 11
+				x2 = 20
+				y1 = 11
+				y2 = 20
+			ENDIF
+			STDOUT " MAP OF CLUSTER COORDINATE PAIRS FOR " + GetQuadrantName$(x1, y1) + " QUADRANT:\n"
+			STDOUT "\n"
+			IF GetQuadrantName$(x1, y1) = GetQuadrantName$(playerPos.xCluster, playerPos.yCluster)
+				STDOUT " (CURRENT POSITION OF STARSHIP AURORA IS HIGHLIGHTED.)\n"
+				STDOUT "\n"
+			ENDIF
+			FOR y = y1 TO y2
+				STDOUT " "
+				FOR x = x1 TO x2
+					IF x = playerPos.xCluster AND y = playerPos.yCluster
+						STDCOLOR 10, 8
+					ELSE
+						STDCOLOR 10, 0
+					ENDIF
+					STDOUT " " + FORMAT$(2, 0, x) + "," + FORMAT$(2, 0, y) + " "
+					STDCOLOR 10, 0
+					IF x < x2 THEN STDOUT "|"
+				NEXT
+				STDOUT "\n"
+				IF y < y2
+					STDOUT " "
+					FOR a = 1 TO 10
+						STDOUT "-------"
+						IF a < 10 THEN STDOUT "+"
+					NEXT
+					STDOUT "\n"
+				ENDIF
+			NEXT
+			STDOUT "\n"
+		ELSEIF subCmd$ = "4"
+			STDOUT " LOCATION OF ALL STARDOCKS WITHIN THE GALAXY:\n\n"
+			FOR a = 1 TO stardocksTotal
+				IF stardocks[a].structInt <> 0
+					STDOUT " CLUSTER (" + stardocks[a].xCluster + ", " + stardocks[a].yCluster + "), "
+					STDOUT "SECTOR (" + stardocks[a].xSector + ", " + stardocks[a].ySector + "), "
+					STDOUT "REFUEL CAP = " + stardocks[a].refuelCap + ", "
+					STDOUT "REPAIR CAP = " + stardocks[a].repairCap + ".\n"
+				ENDIF
+			NEXT
+			STDOUT "\n"
+		ELSEIF subCmd$ = "5"
+			IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+				STDOUT " COMPUTER UNABLE TO DETECT PRESENCE OF ENEMY SHIPS IN THIS CLUSTER.\n\n"
+			ELSE
+				STDOUT " RELATIVE MISSILE TRAJECTORIES FOR ALL ENEMY SHIPS IN CURRENT CLUSTER:\n\n"
+				FOR y = 1 TO 10
+					FOR x = 1 TO 30
+						IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+							IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+								STDOUT " ZYLON WARRIOR AT SECTOR (" + x + ", " + y + "): "
+								xRelative = x - playerPos.xSector
+								yRelative = playerPos.ySector - y
+								angle = INTEGER(ATAN(yRelative, xRelative))
+								IF yRelative < 0 THEN INC angle, 360
+								STDOUT angle + " DEGREES\n"
+							ENDIF
+						ENDIF
+					NEXT
+				NEXT
+				STDOUT "\n"
+			ENDIF
+		ELSEIF subCmd$ = "6"
+			STDOUT " DIAGRAM OF POLAR NAVIGATIONAL/MISSILE DIRECTIONS (DEGREES):\n"
+			STDOUT "\n"
+			STDOUT "             135  90  45  \n"
+			STDOUT "               \\  |  /   \n"
+			STDOUT "                \\ | /    \n"
+			STDOUT "                 \\|/     \n"
+			STDOUT "          180 ----+---- 0 \n"
+			STDOUT "                 /|\\     \n"
+			STDOUT "                / | \\    \n"
+			STDOUT "               /  |  \\   \n"
+			STDOUT "            225  270  315 \n"
+			STDOUT "\n"
+		ELSE
+			IF subCmd$ <> "7"
+				// TODO: Make sure the following is updated as more commands are added.
+				STDOUT " ILLEGAL CHOICE.  PLEASE TYPE A NUMBER FROM 1 - 7.\n\n"
+			ENDIF
+		ENDIF
+		IF INSTR("123456", subCmd$) <> -1
+			IF powerMain > 0
+				DEC powerMain, RND(19) + 1
+				IF powerMain < 0 THEN powerMain = 0
+				IF powerMain = 0
+					STDOUT " REPORT FROM CONTROL ROOM:\n"
+					STDOUT "\n"
+					STDOUT " " + quote$ + Message$("MAIN POWER DEPLETED, SWITCHING TO AUXILIARY POWER.") + quote$ + "\n\n"
+				ENDIF
+			ELSE
+				DEC powerAux, RND(19) + 1
+				IF powerAux < 0 THEN powerAux = 0
+			ENDIF
+		ENDIF
+	UNTIL subCmd$ = "7"
+
+ENDSUB
+
+SUB Command_DamageReport:
+
+	LOCAL a%
+
+	STDOUT " DAMAGE REPORT:\n\n"
+
+	STDOUT " SYSTEM                   OPERATING CAPACITY\n\n"
+
+	FOR a = 1 TO 11
+		STDOUT " " + GetSystemName$(a) + FORMAT$(0, 2, systems[a] / 100.0) + "%\n"
+	NEXT
+
+	STDOUT "\n"
+
+ENDSUB
+
+SUB Command_Debug_ID:
+
+	RETURN
+
+	STDOUT " " + playerName$ + "\n"
+	STDOUT " " + stardockPasscode$ + "\n"
+	STDOUT " " + selfDestructPasscode$ + "\n\n"
+
+ENDSUB
+
+SUB Command_Debug_KillAll:
+
+	RETURN
+
+	zylonsRemaining = 0
+
+ENDSUB
+
+SUB Command_Debug_Zylons:
+
+	LOCAL a%
+
+	RETURN
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].structInt <> 0
+			STDOUT " ZYLON IN CLUSTER " + zylons[a].xCluster + ", " + zylons[a].yCluster + " CLOAKED = " + zylons[a].cloakEngaged + "\n"
+		ENDIF
+	NEXT
+
+	STDOUT "\n"
+
+ENDSUB
+
+SUB Command_Exchange:
+
+	LOCAL inputString$
+	LOCAL source%
+	LOCAL dest%
+	LOCAL units%
+	LOCAL notEnoughInSource%
+	LOCAL destWouldExceedMax%
+
+	STDOUT " AVAILABLE FUEL/ENERGY SOURCES:\n\n"
+
+	STDOUT " (1) FUEL - PROPULSION\n"
+	STDOUT " (2) MAIN POWER\n"
+	STDOUT " (3) SHIELDS\n"
+	STDOUT " (4) LASERS\n"
+	STDOUT " (5) CLOAK ENERGY\n"
+	STDOUT " (6) LIFE SUPPORT\n"
+	STDOUT " (7) CANCEL\n\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER SOURCE: "
+			inputString$ = STDIN$()
+			inputString$ = TRIM$(inputString$)
+		UNTIL LEN(inputString$) = 1
+		source = INTEGER(inputString$)
+	UNTIL source >= 1 AND source <=7
+	IF source <> 7
+		REPEAT
+			REPEAT
+				STDOUT " ENTER DESTINATION: "
+				inputString$ = STDIN$()
+				inputString$ = TRIM$(inputString$)
+			UNTIL LEN(inputString$) = 1
+			dest = INTEGER(inputString$)
+		UNTIL dest >= 1 AND dest <= 7 AND dest <> source
+		IF dest <> 7
+			REPEAT
+				REPEAT
+					STDOUT " ENTER NUMBER OF UNITS TO TRANSFER (0 TO CANCEL): "
+					inputString$ = STDIN$()
+					inputString$ = TRIM$(inputString$)
+				UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+				units = INTEGER(inputString$)
+			UNTIL units >= 0
+			IF units > 0
+				STDOUT "\n"
+				notEnoughInSource = FALSE
+				destWouldExceedMax = FALSE
+				SELECT source
+					CASE 1
+						IF units > fuel
+							notEnoughInSource = TRUE
+						ENDIF
+					CASE 2
+						IF units > powerMain
+							notEnoughInSource = TRUE
+						ENDIF
+					CASE 3
+						IF units > shields
+							notEnoughInSource = TRUE
+						ENDIF
+					CASE 4
+						IF units > laserUnits
+							notEnoughInSource = TRUE
+						ENDIF
+					CASE 5
+						IF units > cloakEnergy
+							notEnoughInSource = TRUE
+						ENDIF
+					CASE 6
+						IF units > lifeSupportUnits
+							notEnoughInSource = TRUE
+						ENDIF
+				ENDSELECT
+				IF notEnoughInSource = FALSE
+					SELECT dest
+						CASE 1
+							IF fuel + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+						CASE 2
+							IF powerMain + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+						CASE 3
+							IF shields + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+						CASE 4
+							IF laserUnits + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+						CASE 5
+							IF cloakEnergy + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+						CASE 6
+							IF lifeSupportUnits + units > 10000
+								destWouldExceedMax = TRUE
+							ENDIF
+					ENDSELECT
+					IF destWouldExceedMax = FALSE
+						// Everything should be okay, do the transfer.
+						SELECT source
+							CASE 1
+								DEC fuel, units
+							CASE 2
+								DEC powerMain, units
+							CASE 3
+								DEC shields, units
+							CASE 4
+								DEC laserUnits, units
+							CASE 5
+								DEC cloakEnergy, units
+							CASE 6
+								DEC lifeSupportUnits, units
+						ENDSELECT
+						SELECT dest
+							CASE 1
+								INC fuel, units
+							CASE 2
+								INC powerMain, units
+							CASE 3
+								INC shields, units
+							CASE 4
+								INC laserUnits, units
+							CASE 5
+								INC cloakEnergy, units
+							CASE 6
+								INC lifeSupportUnits, units
+						ENDSELECT
+						STDOUT " REPORT FROM CONTROL ROOM:\n"
+						STDOUT "\n"
+						STDOUT " " + quote$ + Message$("TRANSFER OF " + units + " UNIT(S) SUCCESSFUL.") + quote$ + "\n"
+					ELSE
+						STDOUT " REPORT FROM CONTROL ROOM:\n"
+						STDOUT "\n"
+						STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- DESTINATION WOULD EXCEED MAXIMUM CAPACITY.") + quote$ + "\n"
+					ENDIF
+				ELSE
+					STDOUT " REPORT FROM CONTROL ROOM:\n"
+					STDOUT "\n"
+					STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- NOT ENOUGH IN SOURCE TO ACCOMMODATE REQUEST.") + quote$ + "\n"
+				ENDIF
+			ENDIF
+		ENDIF
+	ENDIF
+
+	STDOUT "\n"
+
+ENDSUB
+
+SUB Command_Hack:
+
+	// Consider hacking to be a computer function; if fatally damaged, can't be used.
+	// More damage = harder to hack.
+	// Have it eat up a little power since we're using the computer.
+
+	LOCAL inputString$
+	LOCAL coordCount%
+	LOCAL coordinates$[]
+	LOCAL xSectorEnemy%
+	LOCAL ySectorEnemy%
+	LOCAL prefix%
+	LOCAL range%
+	LOCAL prefixPos%
+	LOCAL guess%
+	LOCAL a%
+	LOCAL x%
+	LOCAL y%
+	LOCAL z%
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CAPTAIN, THERE APPEARS TO BE NO ENEMY SHIPS IN THIS CLUSTER.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF systems[SYS_COMPUTER] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("COMPUTER INOPERATIVE, UNABLE TO UTILIZE HACKING FUNCTION.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " REMOTE PENETRATION UTILITY ON-LINE AND READY.\n"
+
+	IF systems[SYS_COMPUTER] < 10000
+		STDOUT " DAMAGE TO THE COMPUTER MAY REDUCE ABILITY TO ISOLATE PREFIX COMBINATIONS.\n"
+	ENDIF
+
+	STDOUT "\n"
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 1
+		xSectorEnemy = 0
+		ySectorEnemy = 0
+		FOR x = 1 TO 30
+			FOR y = 1 TO 10
+				IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+					IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+						xSectorEnemy = x
+						ySectorEnemy = y
+						BREAK
+					ENDIF
+				ENDIF
+			NEXT
+			IF xSectorEnemy <> 0 AND ySectorEnemy <> 0 THEN BREAK
+		NEXT
+	ELSE
+		REPEAT
+			STDOUT " ENTER SECTOR X, Y COORDINATES OF ENEMY SHIP TO TARGET: "
+			inputString$ = STDIN$()
+			coordCount = SPLITSTR(inputString$, coordinates$[], ", ", TRUE)
+			IF coordCount = 2
+				xSectorEnemy = INTEGER(coordinates$[0])
+				ySectorEnemy = INTEGER(coordinates$[1])
+			ENDIF
+		UNTIL coordCount = 2 AND xSectorEnemy >= 1 AND xSectorEnemy <= 30 AND ySectorEnemy >= 1 AND ySectorEnemy <= 10
+		IF galaxy[playerPos.xCluster][playerPos.yCluster][xSectorEnemy][ySectorEnemy] <> GAL_ZYLON
+			STDOUT "\n REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("ENEMY SHIP NOT LOCATED IN THAT SECTOR, CAPTAIN!") + quote$ + "\n\n"
+			RETURN
+		ELSE
+			IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, xSectorEnemy, ySectorEnemy) = TRUE
+				STDOUT "\n REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("ENEMY SHIP NOT LOCATED IN THAT SECTOR, CAPTAIN!") + quote$ + "\n\n"
+				RETURN
+			ENDIF
+		ENDIF
+		STDOUT "\n"
+	ENDIF
+
+	FOR z = 1 TO zylonsTotal
+		IF zylons[z].xCluster = playerPos.xCluster AND zylons[z].yCluster = playerPos.yCluster
+			IF zylons[z].xSector = xSectorEnemy AND zylons[z].ySector = ySectorEnemy
+				BREAK
+			ENDIF
+		ENDIF
+	NEXT
+
+	IF zylons[z].canHack = FALSE
+		STDCOLOR 12, 0
+		STDOUT " >>> ERROR: PREVIOUS HACK ATTEMPT ALREADY MADE <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	zylons[z].canHack = FALSE
+
+	prefix = RND(899799) + 100100
+	range = 3 + INTEGER((10999 - systems[SYS_COMPUTER]) / 1000)
+	prefixPos = RND(range - 1) + 1
+
+	STDOUT " ATTEMPTING TO BRUTE FORCE PREFIX CODE OF ENEMY VESSEL:\n\n"
+
+	STDOUT " CURRENT PREFIX NUMBER: "
+
+	FOR a = 100000 TO (prefix - prefixPos + 1)
+		STDOUT a
+		IF a < (prefix - prefixPos + 1) THEN STDOUT "\b\b\b\b\b\b"
+	NEXT
+
+	STDOUT "\n\n"
+
+	STDOUT " COMPUTER HAS NARROWED DOWN THE POSSIBLE PREFIX CODE COMBINATIONS.\n\n"
+
+	STDOUT " PLEASE MAKE A SELECTION FROM THE FOLLOWING VALUES:\n\n"
+
+	FOR a = (prefix - prefixPos + 1) TO (prefix - prefixPos + 1) + (range - 1)
+		STDOUT "\t" + a + "\n"
+	NEXT
+
+	STDOUT "\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER PREFIX CODE: "
+			inputString$ = STDIN$()
+			inputString$ = TRIM$(inputString$)
+		UNTIL LEN(inputString$) = 6
+		guess = INTEGER(inputString$)
+	UNTIL guess >= 10000 AND guess <= 999999
+
+	STDOUT "\n"
+
+	IF guess <> prefix
+		STDCOLOR 12, 0
+		STDOUT " >>> INCORRECT, ACCESS DENIED <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	STDOUT " >>> ACCESS GRANTED <<<\n\n"
+
+	STDOUT " ZYLON VESSEL TACTICAL CONSOLE MENU:\n\n"
+
+	STDOUT " (1) FUEL\n"
+	STDOUT " (2) SHIELDS\n"
+	STDOUT " (3) PULSE CANNON UNITS\n"
+	STDOUT " (4) CLOAKING DEVICE ENERGY\n\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER NUMBER OF DESIRED FUNCTION: "
+			inputString$ = STDIN$()
+			inputString$ = TRIM$(inputString$)
+		UNTIL LEN(inputString$) = 1
+	UNTIL INSTR("1234", inputString$) <> -1
+
+	STDOUT "\n"
+
+	IF inputString$ = "1"
+		zylons[z].fuel = 0
+		STDOUT " ENEMY SHIP'S COMPUTER NOW READS FUEL AS SET TO 0.\n\n"
+	ELSEIF inputString$ = "2"
+		zylons[z].shields = 0
+		STDOUT " ENEMY SHIP'S COMPUTER NOW READS SHIELDS AS SET TO 0.\n\n"
+	ELSEIF inputString$ = "3"
+		zylons[z].pulseUnits = 0
+		STDOUT " ENEMY SHIP'S COMPUTER NOW READS PULSE UNITS AS SET TO 0.\n\n"
+	ELSE
+		zylons[z].cloakEnergy = 0
+		STDOUT " ENEMY SHIP'S COMPUTER NOW READS CLOAK ENERGY AS SET TO 0.\n\n"
+	ENDIF
+
+	STDOUT " --- COMPUTER LINK WITH ZYLON VESSEL SEVERED ---\n\n"
+
+	IF powerMain > 0
+		DEC powerMain, RND(19) + 1
+		IF powerMain < 0 THEN powerMain = 0
+		IF powerMain = 0
+			STDOUT " REPORT FROM CONTROL ROOM:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("MAIN POWER DEPLETED, SWITCHING TO AUXILIARY POWER.") + quote$ + "\n\n"
+		ENDIF
+	ELSE
+		DEC powerAux, RND(19) + 1
+		IF powerAux < 0 THEN powerAux = 0
+	ENDIF
+
+ENDSUB
+
+SUB Command_Help:
+
+	STDOUT " LIST OF AVAILABLE COMMANDS:\n\n"
+
+	STDOUT " CLOAK (or CLO):      ENGAGE/DISENGAGE CLOAKING DEVICE\n"
+	STDOUT " COMPUTER (or COM):   ON-BOARD COMPUTER RELATED FUNCTIONS\n"
+	STDOUT " DAMAGE (or DAM):     VIEW DAMAGE REPORT\n"
+	STDOUT " EXCHANGE (or EXC):   TRANSFER TO/FROM DIFFERENT FUEL/ENERGY SOURCES\n"
+	STDOUT " HACK:                ATTEMPT TO BREAK INTO ENEMY'S CONSOLE\n"
+	STDOUT " HELP (or ?):         LIST BRIEF SUMMARY OF AVAILABLE COMMANDS\n"
+	STDOUT " INVENTORY (or INV):  LIST SHIP QUANTITIES (FUEL, SHIELDS, ARMS, ETC.)\n"
+	STDOUT " LASER (or LAS):      FIRE LASER WEAPON\n"
+	STDOUT " LOCATION (or LOC):   DISPLAY CURRENT LOCATION OF STARSHIP AURORA\n"
+	STDOUT " MISSILE (or MIS):    FIRE NEUTRON MISSILE\n"
+	STDOUT " NAVIGATE (or NAV):   TRAVEL TO A NEW LOCATION\n"
+	STDOUT " QUIT:                QUIT GAME\n"
+	STDOUT " REFUEL (or REF):     STOCK UP ON FUEL, SHIELDS, ARMS, ETC.\n"
+	STDOUT " REPAIR (or REP):     REPAIR DAMAGE TO SHIP\n"
+	STDOUT " SAVE:                SAVE GAME TO DISK\n"
+	STDOUT " SCAN:                SCAN SURROUNDINGS OR FOR ENEMY SIGNATURES\n"
+	STDOUT " SELF-DESTRUCT:       ACTIVATE SELF-DESTRUCT MECHANISM\n"
+	STDOUT " SMART BOMB (or SMA): DEPLOY SMART BOMB IN CURRENT CLUSTER\n"
+	STDOUT " STATUS (or STAT):    DISPLAYS CRITICAL STATUS INFO ON CURRENT GAME\n"
+	STDOUT " VIEWPORT (or VIEW):  SHOW VISUAL READOUT OF CURRENT CLUSTER\n\n"
+
+ENDSUB
+
+SUB Command_Inventory:
+
+	LOCAL a%
+	LOCAL s$
+
+	STDOUT " CURRENT INVENTORY LEVELS:\n\n"
+
+	STDOUT " FUEL:                       " + fuel
+	s$ = fuel
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(fuel / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(fuel / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " MAIN POWER:                 " + powerMain
+	s$ = powerMain
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(powerMain / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(powerMain / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " AUX POWER:                  " + powerAux
+	s$ = powerAux
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(powerAux / 125)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(powerAux / 125)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " SHIELDS:                    " + shields
+	s$ = shields
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(shields / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(shields / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " LIFE SUPPORT UNITS:         " + lifeSupportUnits
+	s$ = lifeSupportUnits
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(lifeSupportUnits / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(lifeSupportUnits / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " RESERVE LIFE SUPPORT UNITS: " + lifeSupportUnitsReserve
+	s$ = lifeSupportUnitsReserve
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(lifeSupportUnitsReserve / 125)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(lifeSupportUnitsReserve / 125)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " CLOAK ENERGY:               " + cloakEnergy
+	s$ = cloakEnergy
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(cloakEnergy / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(cloakEnergy / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " LASER UNITS:                " + laserUnits
+	s$ = laserUnits
+	FOR a = 1 TO 6 - LEN(s$)
+		STDOUT " "
+	NEXT
+	STDOUT "["
+	STDCOLOR 0, 2
+	FOR a = 1 TO INTEGER(laserUnits / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 0, 4
+	FOR a = 1 TO 20 - INTEGER(laserUnits / 500)
+		STDOUT " "
+	NEXT
+	STDCOLOR 10, 0
+	STDOUT "]\n"
+
+	STDOUT " NEUTRON MISSILES:           " + missiles + "\n"
+
+	STDOUT " SMART BOMB:                 " + smartBomb
+
+	IF smartBomb = 1
+		STDOUT " (AVAILABLE)\n\n"
+	ELSE
+		STDOUT " (UNAVAILABLE)\n\n"
+	ENDIF
+
+ENDSUB
+
+SUB Command_Laser:
+
+	LOCAL inputString$
+	LOCAL coordCount%
+	LOCAL coordinates$[]
+	LOCAL xSectorEnemy%
+	LOCAL ySectorEnemy%
+	LOCAL unitsToFire%
+	LOCAL distance#
+	LOCAL dist1%
+	LOCAL dist2%
+	LOCAL xMove#
+	LOCAL yMove#
+	LOCAL maxFire%
+	LOCAL x%
+	LOCAL y%
+	LOCAL a%
+	LOCAL z%
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CAPTAIN, THERE APPEARS TO BE NO ENEMY SHIPS IN THIS CLUSTER.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF systems[SYS_LASERS] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("LASERS ARE INOPERATIVE, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF laserUnits = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("LASER ENERGY IS FULLY DEPLETED, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = TRUE
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("WEAPONS ARE UNAVAILABLE WHEN CLOAKING DEVICE IS ACTIVE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " LASER WEAPON SYSTEM ON-LINE AND READY.\n"
+
+	IF systems[SYS_LASERS] < 10000
+		STDOUT " DAMAGE TO THE SYSTEM MAY HAMPER ACCURACY.\n"
+	ENDIF
+
+	STDOUT "\n"
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 1
+		xSectorEnemy = 0
+		ySectorEnemy = 0
+		FOR x = 1 TO 30
+			FOR y = 1 TO 10
+				IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+					IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+						xSectorEnemy = x
+						ySectorEnemy = y
+						BREAK
+					ENDIF
+				ENDIF
+			NEXT
+			IF xSectorEnemy <> 0 AND ySectorEnemy <> 0 THEN BREAK
+		NEXT
+	ELSE
+		REPEAT
+			STDOUT " ENTER SECTOR X, Y COORDINATES OF ENEMY SHIP TO TARGET: "
+			inputString$ = STDIN$()
+			coordCount = SPLITSTR(inputString$, coordinates$[], ", ", TRUE)
+			IF coordCount = 2
+				xSectorEnemy = INTEGER(coordinates$[0])
+				ySectorEnemy = INTEGER(coordinates$[1])
+			ENDIF
+		UNTIL coordCount = 2 AND xSectorEnemy >= 1 AND xSectorEnemy <= 30 AND ySectorEnemy >= 1 AND ySectorEnemy <= 10
+		IF galaxy[playerPos.xCluster][playerPos.yCluster][xSectorEnemy][ySectorEnemy] <> GAL_ZYLON
+			STDOUT "\n REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("ENEMY SHIP NOT LOCATED IN THAT SECTOR, CAPTAIN!") + quote$ + "\n\n"
+			RETURN
+		ELSE
+			IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, xSectorEnemy, ySectorEnemy) = TRUE
+				STDOUT "\n REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("ENEMY SHIP NOT LOCATED IN THAT SECTOR, CAPTAIN!") + quote$ + "\n\n"
+				RETURN
+			ENDIF
+		ENDIF
+	ENDIF
+
+	maxFire = 2500
+	IF maxFire > laserUnits THEN maxFire = laserUnits
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER NUMBER OF UNITS TO FIRE (1 - " + maxFire + ", 0 TO CANCEL): "
+			inputString$ = STDIN$()
+			inputString$ = TRIM$(inputString$)
+		UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 4
+		unitsToFire = INTEGER(inputString$)
+	UNTIL unitsToFire >= 0 AND unitsToFire <= maxFire
+
+	STDOUT "\n"
+
+	IF unitsToFire = 0 THEN RETURN
+
+	// Follow a path from the Aurora to the enemy to see if something blocks the laser's trajectory.
+
+	dist1 = ABS(playerPos.xSector - xSectorEnemy)
+	dist2 = ABS(playerPos.ySector - ySectorEnemy)
+
+	distance = MAX(dist1, dist2)
+
+	xMove = (xSectorEnemy - playerPos.xSector) / distance
+	yMove = (ySectorEnemy - playerPos.ySector) / distance
+
+	FOR a = 1 TO distance
+		x = INTEGER(playerPos.xSector + (xMove * a))
+		y = INTEGER(playerPos.ySector + (yMove * a))
+		IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON AND (x <> xSectorEnemy OR y <> ySectorEnemy)
+			// This needed testing at one point, but was proven to work.
+			IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("LASER PATH OBSTRUCTED BY ANOTHER ENEMY SHIP!  TRAJECTORY RE-ASSIGNED!") + quote$ + "\n\n"
+			ELSE
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("LASER PATH OBSTRUCTED BY CLOAKED ENEMY SHIP!  TRAJECTORY RE-ASSIGNED!") + quote$ + "\n\n"
+				FOR z = 1 TO zylonsTotal
+					IF zylons[z].xCluster = playerPos.xCluster AND zylons[z].yCluster = playerPos.yCluster
+						IF zylons[z].xSector = x AND zylons[z].ySector = y
+							zylons[z].cloakEngaged = FALSE
+							BREAK
+						ENDIF
+					ENDIF
+				NEXT
+			ENDIF
+			xSectorEnemy = x
+			ySectorEnemy = y
+			BREAK
+		ELSEIF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_STARDOCK
+			StardockCollateralDamage(playerPos.xCluster, playerPos.yCluster, unitsToFire, TRUE)
+			DEC laserUnits, unitsToFire
+			STDOUT " LASER BANK CAPACITY DOWN TO " + laserUnits + " UNIT(S).\n\n"
+			RETURN
+		ELSEIF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_EMPTY AND galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_AURORA
+			IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_ZYLON
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- LASER TRAJECTORY OBSTRUCTED BY " + galaxyDescriptStrings$[galaxy[playerPos.xCluster][playerPos.yCluster][x][y] - 1] + ".") + quote$ + "\n\n"
+				RETURN
+			ENDIF
+		ENDIF
+	NEXT
+
+	// Laser will definitely hit Zylon.
+
+	DEC laserUnits, unitsToFire
+	IF systems[SYS_LASERS] < 10000 THEN DEC unitsToFire, INTEGER((RND(99) + 1) * (10000.0 / systems[SYS_LASERS]))
+	IF unitsToFire < 0 THEN unitsToFire = 0
+
+	DamageZylon(playerPos.xCluster, playerPos.yCluster, xSectorEnemy, ySectorEnemy, unitsToFire, WEAPON_LASER)
+
+	STDOUT " LASER BANK CAPACITY DOWN TO " + laserUnits + " UNIT(S).\n\n"
+
+ENDSUB
+
+SUB Command_Location:
+
+	STDOUT " QUADRANT = " + GetQuadrantName$(playerPos.xCluster, playerPos.yCluster) + "\n"
+	STDOUT " CLUSTER  = (" + playerPos.xCluster + ", " + playerPos.yCluster + ")\n"
+	STDOUT " SECTOR   = (" + playerPos.xSector + ", " + playerPos.ySector + ")\n\n"
+
+ENDSUB
+
+SUB Command_Missile:
+
+	LOCAL inputString$
+	LOCAL angle%
+	LOCAL distance#
+	LOCAL x%
+	LOCAL y%
+	LOCAL a%
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CAPTAIN, THERE APPEARS TO BE NO ENEMY SHIPS IN THIS CLUSTER.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF systems[SYS_MISSILES] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("MISSILE SYSTEM IS INOPERATIVE, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF missiles = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("MISSILE BANKS ARE EMPTY, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = TRUE
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("WEAPONS ARE UNAVAILABLE WHEN CLOAKING DEVICE IS ACTIVE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " NEUTRON MISSILE SYSTEM ON-LINE AND READY.\n"
+
+	IF systems[SYS_MISSILES] < 10000
+		STDOUT " DAMAGE TO THE SYSTEM MAY HAMPER ACCURACY.\n"
+	ENDIF
+
+	STDOUT "\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER ANGLE OF TRAJECTORY (0 - 360 WHOLE NUMBER, BLANK LINE CANCELS): "
+			inputString$ = STDIN$()
+			inputString$ = TRIM$(inputString$)
+		UNTIL LEN(inputString$) <= 3
+		angle = INTEGER(inputString$)
+	UNTIL angle >=0 AND angle <= 360
+
+	STDOUT "\n"
+
+	IF LEN(inputString$) = 0 THEN RETURN
+
+	IF angle = 360 THEN angle = 0
+
+	// Reduce accuracy if missile system damaged.
+
+	IF systems[SYS_MISSILES] < 10000
+		IF RND(9) >= 5
+			INC angle, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_MISSILES]))
+		ELSE
+			DEC angle, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_MISSILES]))
+		ENDIF
+	ENDIF
+
+	IF angle < 0
+		angle = 360 + angle
+	ELSEIF angle >= 360
+		DEC angle, 360
+	ENDIF
+
+	STDOUT " MISSILE TRACKING:\n\n"
+
+	distance = 0
+
+	REPEAT
+		INC distance
+		x = playerPos.xSector + (distance * COS(angle)) + .5
+		y = playerPos.ySector - (distance * SIN(angle)) + .5
+		IF x >= 1 AND x <= 30 AND y >= 1 AND y <= 10
+			STDOUT " (" + x + ", " + y + ")\n"
+			Pause(100)
+			IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+				STDOUT "\n"
+				IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = TRUE
+					STDOUT " REPORT FROM TACTICAL:\n"
+					STDOUT "\n"
+					STDOUT " " + quote$ + Message$("MISSILE TRAJECTORY HAS REVEALED CLOAKED ZYLON SHIP.") + quote$ + "\n\n"
+					FOR a = 1 TO zylonsTotal
+						IF zylons[a].xCluster = playerPos.xCluster AND zylons[a].yCluster = playerPos.yCluster
+							IF zylons[a].xSector = x AND zylons[a].ySector = y
+								zylons[a].cloakEngaged = FALSE
+								BREAK
+							ENDIF
+						ENDIF
+					NEXT
+				ENDIF
+				DamageZylon(playerPos.xCluster, playerPos.yCluster, x, y, 4000, WEAPON_MISSILE)
+				BREAK
+			ELSEIF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_STARDOCK
+				STDOUT "\n"
+				StardockCollateralDamage(playerPos.xCluster, playerPos.yCluster, 4000, FALSE)
+				BREAK
+			ELSEIF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_EMPTY AND galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_AURORA
+				STDOUT " MISSILE BLOCKED BY " + galaxyDescriptStrings$[galaxy[playerPos.xCluster][playerPos.yCluster][x][y] - 1] + " AT (" + x + ", " + y + ")\n\n"
+				BREAK
+			ENDIF
+		ENDIF
+	UNTIL x < 1 OR x > 30 OR y < 1 OR y > 10
+
+	IF x < 1 OR x > 30 OR y < 1 OR y > 10
+		STDOUT " TARGET MISSED -- MISSILE HAS ESCAPED CLUSTER BOUNDARIES\n\n"
+	ENDIF
+
+	DEC missiles
+
+	IF missiles >= 1
+		STDOUT " NUMBER OF MISSILES REMAINING IN INVENTORY: " + missiles + ".\n\n"
+	ELSE
+		STDOUT " ALL OF THE MISSILES HAVE NOW BEEN USED.\n\n"
+	ENDIF
+
+ENDSUB
+
+SUB Command_Navigate:
+
+	LOCAL navChoice$
+	LOCAL inputVal$
+	LOCAL angle%
+	LOCAL distance#
+	LOCAL xStart%
+	LOCAL yStart%
+	LOCAL xNew%
+	LOCAL yNew%
+	LOCAL xStartGlobal#
+	LOCAL yStartGlobal#
+	LOCAL xStopGlobal#
+	LOCAL yStopGlobal#
+	LOCAL xStopCluster#
+	LOCAL yStopCluster#
+	LOCAL xNewGlobal#
+	LOCAL yNewGlobal#
+	LOCAL xMove#
+	LOCAL yMove#
+	LOCAL oldQuadrant$
+	LOCAL newQuadrant$
+	LOCAL inputString$
+	LOCAL coordCount%
+	LOCAL coordinates$[]
+	LOCAL xClusterDest%
+	LOCAL yClusterDest%
+	LOCAL xSectorDest%
+	LOCAL ySectorDest%
+	LOCAL boundaryReached%
+	LOCAL obstructionReached%
+	LOCAL a%
+
+	boundaryReached = FALSE
+	obstructionReached = FALSE
+
+	STDOUT " AVAILABLE NAVIGATION METHODS:\n"
+	STDOUT "\n"
+	STDOUT " (1) STANDARD PROPULSION (CONFINED TO CLUSTER)\n"
+	STDOUT " (2) INTERSTELLAR (ACROSS CLUSTER BOUNDARIES)\n"
+	STDOUT " (3) HYPER-DRIVE (DIRECT ROUTE TO ANY LOCATION)\n"
+	STDOUT " (4) CANCEL\n"
+	STDOUT "\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER DESIRED FORM OF TRAVEL: "
+			navChoice$ = STDIN$()
+			navChoice$ = TRIM$(navChoice$)
+		UNTIL LEN(navChoice$) = 1
+		STDOUT "\n"
+		IF navChoice$ = "1"
+			// Standard propulsion.
+			IF systems[SYS_PROP_STANDARD] = 0
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("STANDARD PROPULSION ENGINE FATALLY DAMAGED, OPTION UNAVAILABLE.") + quote$ + "\n\n"
+				CONTINUE
+			ENDIF
+			REPEAT
+				REPEAT
+					STDOUT " ENTER DEPARTURE ANGLE (0 - 360, 45 DEGREE INCREMENTS): "
+					inputVal$ = STDIN$()
+					inputVal$ = TRIM$(inputVal$)
+				UNTIL LEN(inputVal$) >= 1 AND LEN(inputVal$) <= 3
+				angle = INTEGER(inputVal$)
+			UNTIL angle = 0 OR angle = 45 OR angle = 90 OR angle = 135 OR angle = 180 OR angle = 225 OR angle = 270 OR angle = 315 OR angle = 360
+			IF angle = 360 THEN angle = 0
+			REPEAT
+				REPEAT
+					STDOUT " ENTER DESIRED DISTANCE IN SECTORS (WHOLE NUMBER): "
+					inputVal$ = STDIN$()
+					inputVal$ = TRIM$(inputVal$)
+				UNTIL LEN(inputVal$) >= 1 AND LEN(inputVal$) <= 2
+				distance = INTEGER(inputVal$)
+			UNTIL distance >= 1 AND distance <= 29
+			STDOUT "\n MOVEMENT TRACKING:\n\n"
+			xStart = playerPos.xSector
+			yStart = playerPos.ySector
+			FOR a = 1 TO distance
+				SELECT angle
+					CASE 0
+						xNew = xStart + a
+						yNew = yStart
+					CASE 45
+						xNew = xStart + a
+						yNew = yStart - a
+					CASE 90
+						xNew = xStart
+						yNew = yStart - a
+					CASE 135
+						xNew = xStart - a
+						yNew = yStart - a
+					CASE 180
+						xNew = xStart - a
+						yNew = yStart
+					CASE 225
+						xNew = xStart - a
+						yNew = yStart + a
+					CASE 270
+						xNew = xStart
+						yNew = yStart + a
+					CASE 315
+						xNew = xStart + a
+						yNew = yStart + a
+				ENDSELECT
+				IF xNew < 1 OR xNew > 30 OR yNew < 1 OR yNew > 10
+					STDOUT " CLUSTER BOUNDARY REACHED\n"
+					boundaryReached = TRUE
+					BREAK
+				ELSEIF galaxy[playerPos.xCluster][playerPos.yCluster][xNew][yNew] = GAL_EMPTY
+					STDOUT " (" + xNew + ", " + yNew + ")\n"
+					playerPos.xSector = xNew
+					playerPos.ySector = yNew
+					// Deduct fuel/resources.
+					// Don't forget travelling through nebula.
+					DEC fuel, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_PROP_STANDARD]))
+					IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][xNew][yNew] = GAL_NEB_OCCUPIED
+						DEC fuel, RND(19) + 1	// Standard amount caused by nebula.
+					ENDIF
+					IF fuel < 0 THEN fuel = 0
+					IF powerMain > 0
+						DEC powerMain, RND(9) + 1
+						IF powerMain < 0 THEN powerMain = 0
+						IF powerMain = 0
+							STDOUT " MAIN POWER DEPLETED -- SWITCHING TO AUXILIARY POWER\n"
+						ENDIF
+					ELSE
+						DEC powerAux, RND(9) + 1
+						IF powerAux < 0 THEN powerAux = 0
+					ENDIF
+					IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][xNew][yNew] = GAL_NEB_OCCUPIED
+						IF shields <> 0
+							DEC shields, RND(19) + 1	// Standard amount caused by nebula.
+							IF shields < 0 THEN shields = 0
+							STDOUT " NEBULA ENCOUNTERED -- SHIELDS DOWN TO " + shields + "\n"
+						ENDIF
+					ENDIF
+					IF cloakEngaged = TRUE
+						DEC cloakEnergy, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_CLOAK]))
+						IF cloakEnergy < 0 THEN cloakEnergy = 0
+						IF cloakEnergy = 0
+							STDOUT " CLOAK ENERGY DEPLETED -- CLOAKING DEVICE AUTOMATICALLY DEACTIVATED\n"
+							cloakEngaged = FALSE
+						ENDIF
+					ENDIF
+					IF lifeSupportUnits > 0
+						DEC lifeSupportUnits, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_LIFE]))
+						IF lifeSupportUnits < 0 THEN lifeSupportUnits = 0
+						IF lifeSupportUnits = 0
+							STDOUT " PRIMARY LIFE SUPPORT DEPLETED -- SWITCHING TO RESERVE LIFE SUPPORT\n"
+						ENDIF
+					ELSE
+						DEC lifeSupportUnitsReserve, INTEGER((RND(9) + 1) * (10000.0 / systems[SYS_LIFE]))
+						IF lifeSupportUnitsReserve < 0 THEN lifeSupportUnitsReserve = 0
+					ENDIF
+				ELSE
+					IF galaxy[playerPos.xCluster][playerPos.yCluster][xNew][yNew] = GAL_ZYLON
+						IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, xNew, yNew) = TRUE
+							STDOUT " UNABLE TO MOVE FURTHER -- SECTOR MAY BE OCCUPIED BY CLOAKED ENEMY VESSEL\n"
+						ELSE
+							STDOUT " OBSTRUCTION REACHED -- " + galaxyDescriptStrings$[galaxy[playerPos.xCluster][playerPos.yCluster][xNew][yNew] - 1] + " AT (" + xNew + ", " + yNew + ")\n"
+						ENDIF
+					ELSE
+						STDOUT " OBSTRUCTION REACHED -- " + galaxyDescriptStrings$[galaxy[playerPos.xCluster][playerPos.yCluster][xNew][yNew] - 1] + " AT (" + xNew + ", " + yNew + ")\n"
+					ENDIF
+					obstructionReached = TRUE
+					BREAK
+				ENDIF
+				Pause(100)
+			NEXT
+			IF playerPos.xSector <> xStart OR playerPos.ySector <> yStart
+				galaxy[playerPos.xCluster][playerPos.yCluster][xStart][yStart] = GAL_EMPTY
+				galaxy[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_AURORA
+			ENDIF
+			STDOUT "\n"
+			IF boundaryReached = FALSE AND obstructionReached = FALSE
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("DESTINATION REACHED -- STARSHIP NOW IN SECTOR (" + playerPos.xSector + ", " + playerPos.ySector + ").") + quote$ + "\n"
+				STDOUT "\n"
+			ENDIF
+			BREAK
+		ELSEIF navChoice$ = "2"
+			// Interstellar propulsion.
+			IF systems[SYS_PROP_INTERSTELLAR] = 0
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("INTERSTELLAR PROPULSION ENGINE FATALLY DAMAGED, OPTION UNAVAILABLE.") + quote$ + "\n\n"
+				CONTINUE
+			ENDIF
+			REPEAT
+				REPEAT
+					STDOUT " ENTER DEPARTURE ANGLE (0 - 360, 45 DEGREE INCREMENTS): "
+					inputVal$ = STDIN$()
+					inputVal$ = TRIM$(inputVal$)
+				UNTIL LEN(inputVal$) >= 1 AND LEN(inputVal$) <= 3
+				angle = INTEGER(inputVal$)
+			UNTIL angle = 0 OR angle = 45 OR angle = 90 OR angle = 135 OR angle = 180 OR angle = 225 OR angle = 270 OR angle = 315 OR angle = 360
+			IF angle = 360 THEN angle = 0
+			REPEAT
+				REPEAT
+					STDOUT " ENTER DESIRED DISTANCE IN CLUSTERS (WHOLE NUMBER): "
+					inputVal$ = STDIN$()
+					inputVal$ = TRIM$(inputVal$)
+				UNTIL LEN(inputVal$) >= 1 AND LEN(inputVal$) <= 2
+				distance = INTEGER(inputVal$)
+			UNTIL distance >= 1 AND distance <= 19
+			STDOUT "\n MOVEMENT TRACKING (IN GLOBAL SECTOR UNITS):\n\n"
+			xStartGlobal = (30 * (playerPos.xCluster - 1)) + (playerPos.xSector)
+			yStartGlobal = (10 * (playerPos.yCluster - 1)) + (playerPos.ySector)
+			SELECT angle
+				CASE 0
+					xStopCluster = playerPos.xCluster + distance
+					yStopCluster = playerPos.yCluster
+				CASE 45
+					xStopCluster = playerPos.xCluster + distance
+					yStopCluster = playerPos.yCluster - distance
+				CASE 90
+					xStopCluster = playerPos.xCluster
+					yStopCluster = playerPos.yCluster - distance
+				CASE 135
+					xStopCluster = playerPos.xCluster - distance
+					yStopCluster = playerPos.yCluster - distance
+				CASE 180
+					xStopCluster = playerPos.xCluster - distance
+					yStopCluster = playerPos.yCluster
+				CASE 225
+					xStopCluster = playerPos.xCluster - distance
+					yStopCluster = playerPos.yCluster + distance
+				CASE 270
+					xStopCluster = playerPos.xCluster
+					yStopCluster = playerPos.yCluster + distance
+				CASE 315
+					xStopCluster = playerPos.xCluster + distance
+					yStopCluster = playerPos.yCluster + distance
+			ENDSELECT
+			xStopGlobal = (30 * (xStopCluster - 1)) + (playerPos.xSector)
+			yStopGlobal = (10 * (yStopCluster - 1)) + (playerPos.ySector)
+			xMove = ABS(xStopGlobal - xStartGlobal) / (distance * 30)
+			IF xMove <> 0
+				yMove = ABS(yStopGlobal - yStartGlobal) / (distance * 30)
+			ELSE
+				yMove = ABS(yStopGlobal - yStartGlobal) / (distance * 10)
+			ENDIF
+			xNewGlobal = xStartGlobal
+			yNewGlobal = yStartGlobal
+			oldQuadrant$ = GetQuadrantName$(playerPos.xCluster, playerPos.yCluster)
+			FOR a = 1 TO distance * (10 + (20 * ABS(xMove <> 0)))
+				SELECT angle
+					CASE 0
+						xNewGlobal = xNewGlobal + xMove
+					CASE 45
+						xNewGlobal = xNewGlobal + xMove
+						yNewGlobal = yNewGlobal - yMove
+					CASE 90
+						yNewGlobal = yNewGlobal - yMove
+					CASE 135
+						xNewGlobal = xNewGlobal - xMove
+						yNewGlobal = yNewGlobal - yMove
+					CASE 180
+						xNewGlobal = xNewGlobal - xMove
+					CASE 225
+						xNewGlobal = xNewGlobal - xMove
+						yNewGlobal = yNewGlobal + yMove
+					CASE 270
+						yNewGlobal = yNewGlobal + yMove
+					CASE 315
+						xNewGlobal = xNewGlobal + xMove
+						yNewGlobal = yNewGlobal + yMove
+				ENDSELECT
+				IF INTEGER(xNewGlobal) < 1 OR INTEGER(xNewGlobal) > 600 OR INTEGER(yNewGlobal) < 1 OR INTEGER(yNewGlobal) > 200
+					STDOUT " GALAXY BOUNDARY REACHED\n"
+					boundaryReached = TRUE
+					BREAK
+				ELSEIF GalaxyGlobal(INTEGER(xNewGlobal), INTEGER(yNewGlobal)) = GAL_EMPTY
+					newQuadrant$ = GetQuadrantName$(GetClusterX(INTEGER(xNewGlobal)), GetClusterY(INTEGER(yNewGlobal)))
+					IF newQuadrant$ <> oldQuadrant$
+						STDOUT " ENTERING " + newQuadrant$ + " QUADRANT\n"
+					ENDIF
+					oldQuadrant$ = newQuadrant$
+					IF GetClusterX(INTEGER(xNewGlobal)) <> playerPos.xCluster OR GetClusterY(INTEGER(yNewGlobal)) <> playerPos.yCluster
+						STDOUT " ENTERING CLUSTER (" + GetClusterX(INTEGER(xNewGlobal)) + ", " + GetClusterY(INTEGER(yNewGlobal)) + ")\n"
+					ENDIF
+					STDOUT " (" + INTEGER(xNewGlobal) + ", " + INTEGER(yNewGlobal) + ")\n"
+					playerPos.xCluster = GetClusterX(INTEGER(xNewGlobal))
+					playerPos.yCluster = GetClusterY(INTEGER(yNewGlobal))
+					playerPos.xSector = GetLocalSectorX(INTEGER(xNewGlobal))
+					playerPos.ySector = GetLocalSectorY(INTEGER(yNewGlobal))
+					// Deduct resources.
+					DEC fuel, INTEGER((RND(19) + 1) * (10000.0 / systems[SYS_PROP_INTERSTELLAR]))
+					IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+						DEC fuel, RND(19) + 1
+					ENDIF
+					IF fuel < 0 THEN fuel = 0
+					IF powerMain > 0
+						DEC powerMain, RND(19) + 1
+						IF powerMain < 0 THEN powerMain = 0
+						IF powerMain = 0
+							STDOUT " MAIN POWER DEPLETED -- SWITCHING TO AUXILIARY POWER\n"
+						ENDIF
+					ELSE
+						DEC powerAux, RND(19) + 1
+						IF powerAux < 0 THEN powerAux = 0
+					ENDIF
+					IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+						IF shields <> 0
+							DEC shields, RND(19) + 1
+							IF shields < 0 THEN shields = 0
+							STDOUT " NEBULA ENCOUNTERED -- SHIELDS DOWN TO " + shields + "\n"
+						ENDIF
+					ENDIF
+					IF cloakEngaged = TRUE
+						DEC cloakEnergy, INTEGER((RND(19) + 1) * (10000.0 / systems[SYS_CLOAK]))
+						IF cloakEnergy < 0 THEN cloakEnergy = 0
+						IF cloakEnergy = 0
+							STDOUT " CLOAK ENERGY DEPLETED -- CLOAKING DEVICE AUTOMATICALLY DEACTIVATED\n"
+							cloakEngaged = FALSE
+						ENDIF
+					ENDIF
+					IF lifeSupportUnits > 0
+						DEC lifeSupportUnits, INTEGER((RND(19) + 1) * (10000.0 / systems[SYS_LIFE]))
+						IF lifeSupportUnits < 0 THEN lifeSupportUnits = 0
+						IF lifeSupportUnits = 0
+							STDOUT " PRIMARY LIFE SUPPORT DEPLETED -- SWITCHING TO RESERVE LIFE SUPPORT\n"
+						ENDIF
+					ELSE
+						DEC lifeSupportUnitsReserve, INTEGER((RND(19) + 1) * (10000.0 / systems[SYS_LIFE]))
+						IF lifeSupportUnitsReserve < 0 THEN lifeSupportUnitsReserve = 0
+					ENDIF
+				ELSE
+					IF GalaxyGlobal(xNewGlobal, yNewGlobal) = GAL_ZYLON
+						IF ZylonIsCloaked(GetClusterX(xNewGlobal), GetClusterY(yNewGlobal), GetLocalSectorX(xNewGlobal), GetLocalSectorY(yNewGlobal)) = TRUE
+							STDOUT " UNABLE TO MOVE FURTHER -- SECTOR MAY BE OCCUPIED BY CLOAKED ENEMY VESSEL\n"
+						ELSE
+							STDOUT " OBSTRUCTION REACHED -- " + galaxyDescriptStrings$[GalaxyGlobal(INTEGER(xNewGlobal), INTEGER(yNewGlobal)) - 1] + " AT (" + INTEGER(xNewGlobal) + ", " + INTEGER(yNewGlobal) + ")\n"
+						ENDIF
+					ELSE
+						STDOUT " OBSTRUCTION REACHED -- " + galaxyDescriptStrings$[GalaxyGlobal(INTEGER(xNewGlobal), INTEGER(yNewGlobal)) - 1] + " AT (" + INTEGER(xNewGlobal) + ", " + INTEGER(yNewGlobal) + ")\n"
+					ENDIF
+					obstructionReached = TRUE
+					BREAK
+				ENDIF
+				Pause(100)
+			NEXT
+			IF INTEGER(xNewGlobal) <> xStartGlobal OR INTEGER(yNewGlobal) <> yStartGlobal
+				galaxy[GetClusterX(xStartGlobal)][GetClusterY(yStartGlobal)][GetLocalSectorX(xStartGlobal)][GetLocalSectorY(yStartGlobal)] = GAL_EMPTY
+				galaxy[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_AURORA
+			ENDIF
+			STDOUT "\n"
+			IF boundaryReached = FALSE AND obstructionReached = FALSE
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("DESTINATION REACHED -- STARSHIP NOW IN CLUSTER (" + playerPos.xCluster + ", " + playerPos.yCluster + ") SECTOR (" + playerPos.xSector + ", " + playerPos.ySector + ").") + quote$ + "\n"
+				STDOUT "\n"
+			ENDIF
+			BREAK
+		ELSEIF navChoice$ = "3"
+			// Hyper-drive.
+			IF systems[SYS_PROP_HYPER] = 0
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("HYPER-DRIVE ENGINE FATALLY DAMAGED, OPTION UNAVAILABLE.") + quote$ + "\n\n"
+				CONTINUE
+			ENDIF
+			REPEAT
+				STDOUT " ENTER X, Y COORDINATES OF DESTINATION CLUSTER: "
+				inputString$ = STDIN$()
+				coordCount = SPLITSTR(inputString$, coordinates$[], ", ", TRUE)
+				IF coordCount = 2
+					xClusterDest = INTEGER(coordinates$[0])
+					yClusterDest = INTEGER(coordinates$[1])
+				ENDIF
+			UNTIL coordCount = 2 AND xClusterDest >= 1 AND xClusterDest <= 20 AND yClusterDest >= 1 AND yClusterDest <= 20 AND (xClusterDest <> playerPos.xCluster OR yClusterDest <> playerPos.yCluster)
+			REPEAT
+				STDOUT " ENTER X, Y COORDINATES OF DESTINATION SECTOR: "
+				inputString$ = STDIN$()
+				coordCount = SPLITSTR(inputString$, coordinates$[], ", ", TRUE)
+				IF coordCount = 2
+					xSectorDest = INTEGER(coordinates$[0])
+					ySectorDest = INTEGER(coordinates$[1])
+				ENDIF
+			UNTIL coordCount = 2 AND xSectorDest >= 1 AND xSectorDest <= 30 AND ySectorDest >= 1 AND ySectorDest <= 10
+			STDOUT "\n"
+			IF galaxy[xClusterDest][yClusterDest][xSectorDest][ySectorDest] = GAL_EMPTY
+				xStartGlobal = (30 * (playerPos.xCluster - 1)) + (playerPos.xSector)
+				yStartGlobal = (10 * (playerPos.yCluster - 1)) + (playerPos.ySector)
+				galaxy[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_EMPTY
+				playerPos.xCluster = xClusterDest
+				playerPos.yCluster = yClusterDest
+				playerPos.xSector = xSectorDest
+				playerPos.ySector = ySectorDest
+				galaxy[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_AURORA
+				xStopGlobal = (30 * (playerPos.xCluster - 1)) + (playerPos.xSector)
+				yStopGlobal = (10 * (playerPos.yCluster - 1)) + (playerPos.ySector)
+				// Deduct resources.
+				DEC fuel, INTEGER((RND(29) + 1) * (10000.0 / systems[SYS_PROP_HYPER])) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+				IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+					DEC fuel, RND(19) + 1
+				ENDIF
+				IF fuel < 0 THEN fuel = 0
+				IF powerMain > 0
+					DEC powerMain, (RND(29) + 1) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+					IF powerMain < 0 THEN powerMain = 0
+					IF powerMain = 0
+						STDOUT " MAIN POWER DEPLETED -- SWITCHING TO AUXILIARY POWER\n\n"
+					ENDIF
+				ELSE
+					DEC powerAux, (RND(29) + 1) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+					IF powerAux < 0 THEN powerAux = 0
+				ENDIF
+				IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+					IF shields <> 0
+						DEC shields, RND(19) + 1
+						IF shields < 0 THEN shields = 0
+						STDOUT " NEBULA ENCOUNTERED -- SHIELDS DOWN TO " + shields + "\n\n"
+					ENDIF
+				ENDIF
+				IF cloakEngaged = TRUE
+					DEC cloakEnergy, INTEGER((RND(29) + 1) * (10000.0 / systems[SYS_CLOAK])) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+					IF cloakEnergy < 0 THEN cloakEnergy = 0
+					IF cloakEnergy = 0
+						STDOUT " CLOAK ENERGY DEPLETED -- CLOAKING DEVICE AUTOMATICALLY DEACTIVATED\n\n"
+						cloakEngaged = FALSE
+					ENDIF
+				ENDIF
+				IF lifeSupportUnits > 0
+					DEC lifeSupportUnits, INTEGER((RND(29) + 1) * (10000.0 / systems[SYS_LIFE])) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+					IF lifeSupportUnits < 0 THEN lifeSupportUnits = 0
+					IF lifeSupportUnits = 0
+						STDOUT " PRIMARY LIFE SUPPORT DEPLETED -- SWITCHING TO RESERVE LIFE SUPPORT\n\n"
+					ENDIF
+				ELSE
+					DEC lifeSupportUnitsReserve, INTEGER((RND(29) + 1) * (10000.0 / systems[SYS_LIFE])) * DistanceFun(xStartGlobal, yStartGlobal, xStopGlobal, yStopGlobal)
+					IF lifeSupportUnitsReserve < 0 THEN lifeSupportUnitsReserve = 0
+				ENDIF
+				STDOUT " REPORT FROM ENGINEERING:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("DESTINATION REACHED -- STARSHIP NOW IN CLUSTER (" + playerPos.xCluster + ", " + playerPos.yCluster + ") SECTOR (" + playerPos.xSector + ", " + playerPos.ySector + ").") + quote$ + "\n"
+			ELSE
+				IF galaxy[xClusterDest][yClusterDest][xSectorDest][ySectorDest] = GAL_ZYLON
+					IF ZylonIsCloaked(xClusterDest, yClusterDest, xSectorDest, ySectorDest) = TRUE
+						STDOUT " REPORT FROM ENGINEERING:\n"
+						STDOUT "\n"
+						STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- DESTINATION MAY BE OCCUPIED BY CLOAKED ENEMY VESSEL.") + quote$ + "\n"
+					ELSE
+						STDOUT " REPORT FROM ENGINEERING:\n"
+						STDOUT "\n"
+						STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- DESTINATION COORDINATES OCCUPIED BY " + galaxyDescriptStrings$[galaxy[xClusterDest][yClusterDest][xSectorDest][ySectorDest] - 1] + ".") + quote$ + "\n"
+					ENDIF
+				ELSE
+					STDOUT " REPORT FROM ENGINEERING:\n"
+					STDOUT "\n"
+					STDOUT " " + quote$ + Message$("UNABLE TO COMPLY -- DESTINATION COORDINATES OCCUPIED BY " + galaxyDescriptStrings$[galaxy[xClusterDest][yClusterDest][xSectorDest][ySectorDest] - 1] + ".") + quote$ + "\n"
+				ENDIF
+			ENDIF
+			STDOUT "\n"
+			BREAK
+		ELSE
+			IF navChoice$ <> "4"
+				STDOUT " ILLEGAL CHOICE.  PLEASE TYPE A NUMBER FROM 1 - 4.\n\n"
+			ENDIF
+		ENDIF
+	UNTIL navChoice$ = "4"
+
+ENDSUB
+
+SUB Command_Refuel:
+
+	LOCAL inputString$
+	LOCAL resource%
+	LOCAL amount%
+	LOCAL maxedOut%
+	LOCAL name$
+	LOCAL pw$
+	LOCAL s%
+	LOCAL m%
+
+	IF StardockExistsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+		STDOUT " REPORT FROM CONTROL ROOM:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("NO STARDOCK PRESENT IN THIS CLUSTER, CAPTAIN.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = TRUE
+		STDOUT " REPORT FROM CONTROL ROOM:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CANNOT DOCK WHILE CLOAKED, CAPTAIN.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	// Refuse service if...
+	// Stardock has no refuel capacity left, or
+	// starship is maxed out on all fuel sources.
+
+	FOR s = 1 TO stardocksTotal
+		IF stardocks[s].xCluster = playerPos.xCluster AND stardocks[s].yCluster = playerPos.yCluster
+			BREAK
+		ENDIF
+	NEXT
+
+	IF stardocks[s].refuelCap = 0
+		STDOUT " REPORT FROM STARDOCK:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("ALL FUEL CAPACITY HAS BEEN EXHAUSTED, PLEASE SEEK ANOTHER STARDOCK.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	maxedOut = TRUE
+
+	IF fuel < 10000 THEN maxedOut = FALSE
+	IF powerMain < 10000 THEN maxedOut = FALSE
+	IF shields < 10000 THEN maxedOut = FALSE
+	IF laserUnits < 10000 THEN maxedOut = FALSE
+	IF missiles < 5 THEN maxedOut = FALSE
+	IF cloakEnergy < 10000 THEN maxedOut = FALSE
+	IF lifeSupportUnits < 10000 THEN maxedOut = FALSE
+
+	IF maxedOut = TRUE
+		STDOUT " REPORT FROM CONTROL ROOM:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("ALL FUEL SUPPLIES AT MAXIMUM CAPTAIN, DOCKING NOT NECESSARY.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " WELCOME ABOARD STARDOCK, CAPTAIN.\n\n"
+
+	STDOUT " AUTHORIZATION IS REQUIRED IN ORDER TO RE-STOCK YOUR SHIP.\n\n"
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR NAME: "
+		name$ = STDIN$()
+		name$ = UCASE$(TRIM$(name$))
+	UNTIL LEN(name$) >= 1 AND LEN(name$) <= 25
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR REFUEL/REPAIR CLEARANCE PASSCODE: "
+		pw$ = STDIN$()
+		pw$ = UCASE$(TRIM$(pw$))
+	UNTIL LEN(pw$) >= 1 AND LEN(pw$) <= 25
+
+	IF name$ <> playerName$ OR pw$ <> stardockPasscode$
+		STDCOLOR 12, 0
+		STDOUT "\n >>> PERMISSION DENIED <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	STDOUT "\n PERMISSION GRANTED.\n\n"
+
+	STDOUT " THE STARDOCK'S REFUEL CAPACITY IS CURRENTLY AT " + stardocks[s].refuelCap + ".\n\n"
+
+	STDOUT " HERE ARE YOUR AVAILABLE RESOURCES:\n\n"
+
+	STDOUT " (1) FUEL - PROPULSION\n"
+	STDOUT " (2) MAIN POWER\n"
+	STDOUT " (3) SHIELDS\n"
+	STDOUT " (4) LASER UNITS\n"
+	STDOUT " (5) NEUTRON MISSILES\n"
+	STDOUT " (6) CLOAK ENERGY\n"
+	STDOUT " (7) LIFE SUPPORT UNITS\n"
+	STDOUT " (8) LEAVE STARDOCK\n\n"
+
+	REPEAT
+
+		REPEAT
+			REPEAT
+				STDOUT " ENTER CHOICE FROM 1 - 8: "
+				inputString$ = STDIN$()
+				inputString$ = TRIM$(inputString$)
+			UNTIL LEN(inputString$) = 1
+			resource = INTEGER(inputString$)
+		UNTIL resource >= 1 AND resource <= 8
+
+		STDOUT "\n"
+
+		SELECT resource
+			CASE 1
+				IF fuel = 10000
+					STDOUT " FUEL ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " FUEL CURRENTLY AT " + fuel + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					amount = INTEGER(inputString$)
+					STDOUT "\n"
+					IF amount > 0
+						IF fuel + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM FUEL CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC fuel, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " FUEL NOW AT " + fuel + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 2
+				IF powerMain = 10000
+					STDOUT " MAIN POWER ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " MAIN POWER CURRENTLY AT " + powerMain + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					amount = INTEGER(inputString$)
+					STDOUT "\n"
+					IF amount > 0
+						IF powerMain + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM POWER CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC powerMain, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " MAIN POWER NOW AT " + powerMain + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 3
+				IF shields = 10000
+					STDOUT " SHIELDS ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " SHIELDS CURRENTLY AT " + shields + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					STDOUT "\n"
+					amount = INTEGER(inputString$)
+					IF amount > 0
+						IF shields + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM SHIELD CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC shields, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " SHIELDS NOW AT " + shields + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 4
+				IF laserUnits = 10000
+					STDOUT " LASER BANKS ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " LASER BANKS CURRENTLY AT " + laserUnits + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					amount = INTEGER(inputString$)
+					STDOUT "\n"
+					IF amount > 0
+						IF laserUnits + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM LASER BANK CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC laserUnits, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " LASER BANKS NOW AT " + laserUnits + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 5
+				IF missiles = 5
+					STDOUT " STARSHIP CANNOT CARRY MORE THAN FIVE NEUTRON MISSILES.\n\n"
+				ELSEIF stardocks[s].refuelCap < 4000
+					STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO REPLENISH MISSILE BANKS.\n\n"
+				ELSE
+					STDOUT " NEUTRON MISSILE BANK INVENTORY CURRENTLY AT " + missiles + ".\n\n"
+					REPEAT
+						STDOUT " ENTER NUMBER OF MISSILES DESIRED (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) = 1
+					STDOUT "\n"
+					m = INTEGER(inputString$)
+					IF m > 0
+						IF missiles + m > 5
+							STDOUT " STARSHIP CANNOT CARRY MORE THAN FIVE NEUTRON MISSILES.\n\n"
+						ELSEIF m * 4000 > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC missiles, m
+							DEC stardocks[s].refuelCap, m * 4000
+							STDOUT " NEUTRON MISSILE BANK INVENTORY NOW AT " + missiles + ".\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 6
+				IF cloakEnergy = 10000
+					STDOUT " CLOAK ENERGY ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " CLOAKING ENERGY CURRENTLY AT " + cloakEnergy + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					STDOUT "\n"
+					amount = INTEGER(inputString$)
+					IF amount > 0
+						IF cloakEnergy + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM CLOAK ENERGY CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC cloakEnergy, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " CLOAKING ENERGY NOW AT " + cloakEnergy + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 7
+				IF lifeSupportUnits = 10000
+					STDOUT " LIFE SUPPORT ALREADY AT MAXIMUM.\n\n"
+				ELSE
+					STDOUT " LIFE SUPPORT CURRENTLY AT " + lifeSupportUnits + " UNIT(S).\n\n"
+					REPEAT
+						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
+						inputString$ = STDIN$()
+						inputString$ = TRIM$(inputString$)
+					UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 5
+					STDOUT "\n"
+					amount = INTEGER(inputString$)
+					IF amount > 0
+						IF lifeSupportUnits + amount > 10000
+							STDOUT " OPERATION WOULD EXCEED MAXIMUM LIFE SUPPORT CAPACITY.\n\n"
+						ELSEIF amount > stardocks[s].refuelCap
+							STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+						ELSE
+							INC lifeSupportUnits, amount
+							DEC stardocks[s].refuelCap, amount
+							STDOUT " LIFE SUPPORT NOW AT " + lifeSupportUnits + " UNIT(S).\n"
+							STDOUT " REFUEL CAPACITY OF STARDOCK NOW AT " + stardocks[s].refuelCap + ".\n\n"
+							IF stardocks[s].refuelCap = 0 THEN BREAK
+						ENDIF
+					ENDIF
+				ENDIF
+			CASE 8
+				BREAK
+		ENDSELECT
+
+	UNTIL 0
+
+	IF stardocks[s].refuelCap = 0
+		STDOUT " STARDOCK REFUEL CAPACITY HAS BEEN EXHAUSTED.  STARSHIP NOW DETACHING.\n\n"
+	ELSE
+		STDOUT " STARSHIP AURORA HAS NOW DETACHED FROM STARDOCK.\n\n"
+	ENDIF
+
+ENDSUB
+
+SUB Command_Repair:
+
+	LOCAL inputString$
+	LOCAL name$
+	LOCAL pw$
+	LOCAL cat%
+	LOCAL level#
+	LOCAL capRequired%
+	LOCAL s%
+
+	IF StardockExistsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+		STDOUT " REPORT FROM CONTROL ROOM:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("NO STARDOCK PRESENT IN THIS CLUSTER, CAPTAIN.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = TRUE
+		STDOUT " REPORT FROM CONTROL ROOM:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CANNOT DOCK WHILE CLOAKED, CAPTAIN.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	// Refuse service if...
+	// Stardock has no repair capacity left, or
+	// starship has no damages in any system.
+
+	FOR s = 1 TO stardocksTotal
+		IF stardocks[s].xCluster = playerPos.xCluster AND stardocks[s].yCluster = playerPos.yCluster
+			BREAK
+		ENDIF
+	NEXT
+
+	IF stardocks[s].repairCap = 0
+		STDOUT " REPORT FROM STARDOCK:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("ALL REPAIR CAPABILITY HAS BEEN EXHAUSTED, PLEASE SEEK ANOTHER STARDOCK.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF DamageTotal() = 110000 AND structInt = 10000
+		STDOUT " REPORT FROM STARDOCK:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("ALL SYSTEMS NOMINAL CAPTAIN, DOCKING NOT NECESSARY.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " WELCOME ABOARD STARDOCK, CAPTAIN.\n\n"
+
+	STDOUT " AUTHORIZATION IS REQUIRED IN ORDER TO REPAIR YOUR SHIP.\n\n"
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR NAME: "
+		name$ = STDIN$()
+		name$ = UCASE$(TRIM$(name$))
+	UNTIL LEN(name$) >= 1 AND LEN(name$) <= 25
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR REFUEL/REPAIR CLEARANCE PASSCODE: "
+		pw$ = STDIN$()
+		pw$ = UCASE$(TRIM$(pw$))
+	UNTIL LEN(pw$) >= 1 AND LEN(pw$) <= 25
+
+	IF name$ <> playerName$ OR pw$ <> stardockPasscode$
+		STDCOLOR 12, 0
+		STDOUT "\n >>> PERMISSION DENIED <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	STDOUT "\n PERMISSION GRANTED.\n\n"
+
+	STDOUT " THE STARDOCK'S REPAIR CAPACITY IS CURRENTLY AT " + stardocks[s].repairCap + ".\n\n"
+
+	STDOUT " HERE IS A LIST OF CATEGORIES FROM WHICH TO CHOOSE:\n\n"
+
+	STDOUT "  (1) HULL - REPAIRS STRUCTURAL DAMAGE\n"
+	STDOUT "  (2) PROPULSION - STANDARD\n"
+	STDOUT "  (3) PROPULSION - INTERSTELLAR\n"
+	STDOUT "  (4) PROPULSION - HYPER-DRIVE\n"
+	STDOUT "  (5) LASERS\n"
+	STDOUT "  (6) NEUTRON MISSILES\n"
+	STDOUT "  (7) SMART BOMB\n"
+	STDOUT "  (8) CLOAKING DEVICE\n"
+	STDOUT "  (9) ON-BOARD COMPUTER\n"
+	STDOUT " (10) SCANNERS\n"
+	STDOUT " (11) COMMUNICATIONS\n"
+	STDOUT " (12) LIFE SUPPORT\n"
+	STDOUT " (13) LEAVE STARDOCK\n\n"
+
+	REPEAT
+		REPEAT
+			REPEAT
+				STDOUT " ENTER CHOICE FROM 1 - 13: "
+				inputString$ = STDIN$()
+				inputString$ = TRIM$(inputString$)
+			UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 2
+			cat = INTEGER(inputString$)
+		UNTIL cat >= 1 AND cat <= 13
+		STDOUT "\n"
+		IF cat = 13 THEN BREAK
+		IF cat = 1
+			IF structInt = 10000
+				STDOUT " STRUCTURAL INTEGRITY ALREADY AT 100%, REPAIRS NOT NECESSARY.\n\n"
+				CONTINUE
+			ENDIF
+		ELSE
+			IF systems[cat - 1] = 10000
+				STDOUT " " + LEFT$(GetSystemName$(cat - 1), INSTR(GetSystemName$(cat - 1), ":")) + " NOMINAL, REPAIRS NOT NECESSARY.\n\n"
+				CONTINUE
+			ENDIF
+		ENDIF
+		IF cat = 1
+			REPEAT
+				REPEAT
+					STDOUT " STRUCTURAL INTEGRITY AT " + FORMAT$(0, 2, structInt / 100.0) + "%, INCREASE TO WHAT PERCENTAGE LEVEL (0 TO CANCEL)? "
+					inputString$ = STDIN$()
+					inputString$ = TRIM$(inputString$)
+				UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 6
+				level = inputString$
+			UNTIL level >= 0 AND level <= 100 AND level > structInt / 100.0
+			STDOUT "\n"
+			IF level > 0
+				capRequired = (level * 100) - structInt
+				IF capRequired > stardocks[s].repairCap
+					STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+				ELSE
+					structInt = level * 100
+					DEC stardocks[s].repairCap, capRequired
+					STDOUT " STRUCTURAL INTEGRITY NOW AT " + FORMAT$(0, 2, structInt / 100.0) + "%.\n"
+					STDOUT " REPAIR CAPACITY OF STARDOCK NOW AT " + stardocks[s].repairCap + ".\n\n"
+					IF stardocks[s].repairCap = 0 THEN BREAK
+				ENDIF
+			ENDIF
+		ELSE
+			REPEAT
+				REPEAT
+					STDOUT " " + LEFT$(GetSystemName$(cat - 1), INSTR(GetSystemName$(cat - 1), ":")) + " AT " + FORMAT$(0, 2, systems[cat - 1] / 100.0) + "%, INCREASE TO WHAT PERCENTAGE LEVEL (0 TO CANCEL)? "
+					inputString$ = STDIN$()
+					inputString$ = TRIM$(inputString$)
+				UNTIL LEN(inputString$) >= 1 AND LEN(inputString$) <= 6
+				level = inputString$
+			UNTIL level >= 0 AND level <= 100 AND level > systems[cat - 1] / 100.0
+			STDOUT "\n"
+			IF level > 0
+				capRequired = (level * 100) - systems[cat - 1]
+				IF capRequired > stardocks[s].repairCap
+					STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO FULFILL REQUEST.\n\n"
+				ELSE
+					systems[cat - 1] = level * 100
+					DEC stardocks[s].repairCap, capRequired
+					STDOUT " " + LEFT$(GetSystemName$(cat - 1), INSTR(GetSystemName$(cat - 1), ":")) + " NOW AT " + FORMAT$(0, 2, systems[cat - 1] / 100.0) + "% OPERATING CAPACITY.\n"
+					STDOUT " REPAIR CAPACITY OF STARDOCK NOW AT " + stardocks[s].repairCap + ".\n\n"
+					IF stardocks[s].repairCap = 0 THEN BREAK
+				ENDIF
+			ENDIF
+		ENDIF
+	UNTIL 0
+
+	IF stardocks[s].repairCap = 0
+		STDOUT " STARDOCK REPAIR CAPACITY HAS BEEN EXHAUSTED.  STARSHIP NOW DETACHING.\n\n"
+	ELSE
+		STDOUT " STARSHIP AURORA HAS NOW DETACHED FROM STARDOCK.\n\n"
+	ENDIF
+
+ENDSUB
+
+SUB Command_Save:
+
+	LOCAL fn$
+	LOCAL err$
+	LOCAL inputString$
+	LOCAL okay%
+	LOCAL channel%
+	LOCAL xCluster%
+	LOCAL yCluster%
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL fileLen%
+	LOCAL byte%
+	LOCAL sum#
+	LOCAL a%
+
+	STDOUT " PLEASE PROVIDE A FILE NAME BELOW.\n\n"
+
+	STDOUT " IF DRIVE AND/OR PATH IS NOT SPECIFIED, FILE WILL BE\n"
+	STDOUT " SAVED TO SAME DIRECTORY AS THE PROGRAM EXECUTABLE.\n\n"
+
+	REPEAT
+		STDOUT " ENTER FILE NAME: "
+		fn$ = STDIN$()
+		fn$ = UCASE$(TRIM$(fn$))
+	UNTIL LEN(fn$)
+
+	STDOUT "\n"
+
+	IF DOESFILEEXIST(fn$)
+		REPEAT
+			STDOUT " FILE ALREADY EXISTS, OVERWRITE (Y/N)? "
+			inputString$ = STDIN$()
+			inputString$ = UCASE$(TRIM$(inputString$))
+		UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+		STDOUT "\n"
+		IF LEFT$(inputString$, 1) = "N" THEN RETURN
+		KILLFILE fn$
+	ENDIF
+
+	STDOUT " SAVING..."
+
+	okay = OPENFILE(channel, fn$, 0)
+
+	IF okay
+		TRY
+			WRITESTR channel, "*** SUPER SPACE CADET SAVE GAME FILE ***"
+			FOR xCluster = 1 TO 20
+				FOR yCluster = 1 TO 20
+					FOR xSector = 1 TO 30
+						FOR ySector = 1 TO 10
+							WRITEUBYTE channel, galaxy[xCluster][yCluster][xSector][ySector]
+						NEXT
+					NEXT
+				NEXT
+			NEXT
+			FOR xCluster = 1 TO 20
+				FOR yCluster = 1 TO 20
+					FOR xSector = 1 TO 30
+						FOR ySector = 1 TO 10
+							WRITEUBYTE channel, galaxyNebula[xCluster][yCluster][xSector][ySector]
+						NEXT
+					NEXT
+				NEXT
+			NEXT
+			FOR xCluster = 1 TO 20
+				FOR yCluster = 1 TO 20
+					WRITESTR channel, galaxyScanRecords$[xCluster][yCluster]
+				NEXT
+			NEXT
+			WRITEUBYTE channel, LEN(playerName$)
+			WRITESTR channel, playerName$
+			WRITEUBYTE channel, LEN(stardockPasscode$)
+			WRITESTR channel, stardockPasscode$
+			WRITEUBYTE channel, LEN(selfDestructPasscode$)
+			WRITESTR channel, selfDestructPasscode$
+			WRITEULONG channel, starDate
+			WRITEUBYTE channel, playerPos.xCluster
+			WRITEUBYTE channel, playerPos.yCluster
+			WRITEUBYTE channel, playerPos.xSector
+			WRITEUBYTE channel, playerPos.ySector
+			WRITEUWORD channel, fuel
+			WRITEUWORD channel, powerMain
+			WRITEUWORD channel, powerAux
+			WRITEUWORD channel, shields
+			WRITEUWORD channel, structInt
+			WRITEUWORD channel, laserUnits
+			WRITEUBYTE channel, missiles
+			WRITEUBYTE channel, smartBomb
+			WRITEUWORD channel, cloakEnergy
+			WRITEUBYTE channel, cloakEngaged
+			WRITEUWORD channel, lifeSupportUnits
+			WRITEUWORD channel, lifeSupportUnitsReserve
+			FOR a = 1 TO 11
+				WRITEUWORD channel, systems[a]
+			NEXT
+			WRITEUBYTE channel, crewMembers
+			WRITEUBYTE channel, casualties
+			WRITEUBYTE channel, zylonsTotal
+			WRITEUBYTE channel, zylonsRemaining
+			FOR a = 1 TO zylonsTotal
+				WRITEUBYTE channel, zylons[a].xCluster
+				WRITEUBYTE channel, zylons[a].yCluster
+				WRITEUBYTE channel, zylons[a].xSector
+				WRITEUBYTE channel, zylons[a].ySector
+				WRITEUBYTE channel, zylons[a].fuel
+				WRITESHORTIEEE channel, zylons[a].shieldsMaxCap
+				WRITESHORTIEEE channel, zylons[a].shields
+				WRITEUWORD channel, zylons[a].structInt
+				WRITEUWORD channel, zylons[a].pulseUnits
+				WRITEUBYTE channel, zylons[a].particleBeam
+				WRITEUWORD channel, zylons[a].cloakEnergy
+				WRITEUBYTE channel, zylons[a].cloakEngaged
+				WRITEUBYTE channel, zylons[a].canHack
+			NEXT
+			WRITEUBYTE channel, stardocksTotal
+			WRITEUBYTE channel, stardocksRemaining
+			FOR a = 1 TO stardocksTotal
+				WRITEUBYTE channel, stardocks[a].xCluster
+				WRITEUBYTE channel, stardocks[a].yCluster
+				WRITEUBYTE channel, stardocks[a].xSector
+				WRITEUBYTE channel, stardocks[a].ySector
+				WRITEUWORD channel, stardocks[a].shields
+				WRITEUWORD channel, stardocks[a].structInt
+				WRITEUWORD channel, stardocks[a].refuelCap
+				WRITEUWORD channel, stardocks[a].repairCap
+			NEXT
+			WRITEUBYTE channel, planetsTotal
+			WRITEUBYTE channel, planetsInhabited
+			WRITEUBYTE channel, planetsDestroyed
+			FOR a = 1 TO planetsTotal
+				WRITEUBYTE channel, planets[a].xCluster
+				WRITEUBYTE channel, planets[a].yCluster
+				WRITEUBYTE channel, planets[a].xSector
+				WRITEUBYTE channel, planets[a].ySector
+				WRITEUBYTE channel, planets[a].planetType
+				WRITEULONG channel, planets[a].population
+				WRITEULONG channel, planets[a].casualties
+				WRITEUBYTE channel, planets[a].techLevel
+				WRITEUBYTE channel, planets[a].atmosphere.nitrogen
+				WRITEUBYTE channel, planets[a].atmosphere.oxygen
+				WRITEUBYTE channel, planets[a].atmosphere.co2
+				WRITEUBYTE channel, planets[a].atmosphere.hydrogen
+				WRITEUBYTE channel, planets[a].atmosphere.helium
+				WRITEUBYTE channel, planets[a].atmosphere.methane
+			NEXT
+			WRITEUBYTE channel, totalAsteroidPatches
+			WRITEUBYTE channel, totalNebulaPatches
+			WRITEUWORD channel, totalStars
+			WRITEUBYTE channel, skill
+			CLOSEFILE channel
+			// Compute and write a checksum to the very first byte of the file.
+			fileLen = GETFILESIZE(fn$)
+			okay = OPENFILE(channel, fn$, 1)
+			FILESEEK channel, 0, 0
+			sum = 0
+			FOR a = 1 TO fileLen
+				READUBYTE channel, byte
+				INC sum, byte
+			NEXT
+			CLOSEFILE channel
+			okay = OPENFILE(channel, fn$, -1)
+			WRITEUBYTE channel, MOD(sum, 256)
+			STDOUT "\n\n GAME FILE SUCCESSFULLY SAVED."
+		CATCH err$
+			STDOUT "\n\n ERROR -- GAME FILE NOT SAVED."
+		FINALLY
+	ELSE
+		STDOUT "\n\n ERROR -- GAME FILE NOT SAVED."
+	ENDIF
+
+	CLOSEFILE channel
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB Command_Scan:
+
+	LOCAL scanMethod$
+	LOCAL bGround%
+	LOCAL quadSigCount%[]
+	LOCAL x%
+	LOCAL y%
+	LOCAL a%
+
+	DIM quadSigCount[4]
+
+	IF systems[SYS_SCANNERS] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("SCANNERS INOPERATIVE, COMMAND UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF systems[SYS_SCANNERS] < 10000
+		STDOUT " DAMAGE TO THE SCANNERS MAY AFFECT AVAILABILITY OF INFORMATION.\n\n"
+	ENDIF
+
+	STDOUT " AVAILABLE SCANNING METHODS:\n"
+	STDOUT "\n"
+	STDOUT " (1) SHORT RANGE (CURRENT CLUSTER)\n"
+	STDOUT " (2) MEDIUM RANGE (3 x 3 SURROUNDING CLUSTERS)\n"
+	STDOUT " (3) LONG RANGE (5 x 5 SURROUNDING CLUSTERS)\n"
+	STDOUT " (4) DEEP (SWEEP QUADRANTS FOR ENEMY SIGNATURES)\n"
+	STDOUT " (5) CANCEL\n"
+	STDOUT "\n"
+
+	REPEAT
+		REPEAT
+			STDOUT " ENTER DESIRED SCANNING METHOD: "
+			scanMethod$ = STDIN$()
+			scanMethod$ = TRIM$(scanMethod$)
+		UNTIL LEN(scanMethod$)
+		STDOUT "\n"
+		IF scanMethod$ = "1"
+			STDOUT " SHORT RANGE SCANS INDICATE THE FOLLOWING:\n"
+			STDOUT "\n"
+			IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+				STDOUT " NO ENEMY SHIPS DETECTED.\n"
+			ELSE
+				FOR y = 1 TO 10
+					FOR x = 1 TO 30
+						IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+							IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+								STDOUT " ENEMY SHIP AT SECTOR (" + x + ", " + y + "):\n"
+								IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+									FOR a = 1 TO zylonsTotal
+										IF zylons[a].xCluster = playerPos.xCluster AND zylons[a].yCluster = playerPos.yCluster
+											IF zylons[a].xSector = x AND zylons[a].ySector = y
+												STDOUT "\tFUEL:                 " + FORMAT$(0, 2, zylons[a].fuel / 100.0) + "%\n"
+												STDOUT "\tSHIELDS:              " + FORMAT$(0, 2, (zylons[a].shields / zylons[a].shieldsMaxCap) * 100) + "%\n"
+												STDOUT "\tSTRUCTURAL INTEGRITY: " + FORMAT$(0, 2, zylons[a].structInt / 100.0) + "%\n"
+												STDOUT "\tPULSE UNITS:          " + FORMAT$(0, 2, zylons[a].pulseUnits / 100.0) + "%\n"
+												STDOUT "\tCLOAK ENERGY:         " + FORMAT$(0, 2, zylons[a].cloakEnergy / 100.0) + "%\n"
+												BREAK
+											ENDIF
+										ENDIF
+									NEXT
+								ELSE
+									STDOUT "\tFUEL:                 ?\n"
+									STDOUT "\tSHIELDS:              ?\n"
+									STDOUT "\tSTRUCTURAL INTEGRITY: ?\n"
+									STDOUT "\tPULSE UNITS:          ?\n"
+									STDOUT "\tCLOAK ENERGY:         ?\n"
+								ENDIF
+							ENDIF
+						ENDIF
+					NEXT
+				NEXT
+			ENDIF
+			IF StardockExistsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+				STDOUT " NO STARDOCKS DETECTED.\n"
+			ELSE
+				FOR a = 1 TO stardocksTotal
+					IF stardocks[a].xCluster = playerPos.xCluster AND stardocks[a].yCluster = playerPos.yCluster
+						STDOUT " STARDOCK AT SECTOR (" + stardocks[a].xSector + ", " + stardocks[a].ySector + "):\n"
+						IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+							STDOUT "\tSHIELDS:              " + FORMAT$(0, 2, stardocks[a].shields / 100.0) + "%\n"
+							STDOUT "\tSTRUCTURAL INTEGRITY: " + FORMAT$(0, 2, stardocks[a].structInt / 100.0) + "%\n"
+							STDOUT "\tREPAIR CAPACITY:      " + stardocks[a].repairCap + "\n"
+							STDOUT "\tREFUEL CAPACITY:      " + stardocks[a].refuelCap + "\n"
+							BREAK
+						ELSE
+							STDOUT "\tSHIELDS:              ?\n"
+							STDOUT "\tSTRUCTURAL INTEGRITY: ?\n"
+							STDOUT "\tREPAIR CAPACITY:      ?\n"
+							STDOUT "\tREFUEL CAPACITY:      ?\n"
+						ENDIF
+					ENDIF
+				NEXT
+			ENDIF
+			IF PlanetExistsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+				STDOUT " NO PLANETS DETECTED.\n"
+			ELSE
+				FOR a = 1 TO planetsTotal
+					IF planets[a].xCluster = playerPos.xCluster AND planets[a].yCluster = playerPos.yCluster
+						STDOUT " PLANET AT SECTOR (" + planets[a].xSector + ", " + planets[a].ySector + "):\n"
+						IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+							STDOUT "\tTYPE: "
+							SELECT planets[a].planetType
+								CASE PLANET_TYPE_1
+									STDOUT "I (INHABITED)\n"
+								CASE PLANET_TYPE_2
+									STDOUT "II (LIFE-SUSTAINING/UNCIVILIZED)\n"
+								CASE PLANET_TYPE_3
+									STDOUT "III (UNINHABITABLE)\n"
+							ENDSELECT
+							IF planets[a].planetType = PLANET_TYPE_1
+								STDOUT "\tPOPULATION: " + planets[a].population + "\n"
+								STDOUT "\tCASUALTIES: " + planets[a].casualties + "\n"
+								STDOUT "\tTECHNOLOGICAL LEVEL: "
+								SELECT planets[a].techLevel
+									CASE TECH_PREHISTORIC
+										STDOUT "PRE-HISTORIC\n"
+									CASE TECH_PREINDUSTRIAL
+										STDOUT "PRE-INDUSTRIAL\n"
+									CASE TECH_INDUSTRIAL
+										STDOUT "INDUSTRIAL\n"
+									CASE TECH_MODERN
+										STDOUT "MODERN\n"
+									CASE TECH_SPACE
+										STDOUT "SPACE-AGED\n"
+								ENDSELECT
+							ENDIF
+							STDOUT "\tATMOSPHERIC COMPOSITION:\n"
+							STDOUT "\t\tNITROGEN:       " + planets[a].atmosphere.nitrogen + "%\n"
+							STDOUT "\t\tOXYGEN:         " + planets[a].atmosphere.oxygen + "%\n"
+							STDOUT "\t\tCARBON DIOXIDE: " + planets[a].atmosphere.co2 + "%\n"
+							STDOUT "\t\tHYDROGEN:       " + planets[a].atmosphere.hydrogen + "%\n"
+							STDOUT "\t\tHELIUM:         " + planets[a].atmosphere.helium + "%\n"
+							STDOUT "\t\tMETHANE:        " + planets[a].atmosphere.methane + "%\n"
+							BREAK
+						ELSE
+							STDOUT "\tTYPE: ?\n"
+							STDOUT "\tATMOSPHERIC COMPOSITION: ?\n"
+							BREAK
+						ENDIF
+					ENDIF
+				NEXT
+			ENDIF
+			IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+				IF AsteroidsExistInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+					STDOUT " NO ASTEROID FIELD DETECTED.\n"
+				ELSE
+					STDOUT " ASTEROID FIELD DETECTED -- OCCUPYING " + TotalSectorsAsteroids(playerPos.xCluster, playerPos.yCluster) + "/300 SECTORS.\n"
+				ENDIF
+				IF NebulaExistsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+					STDOUT " NO NEBULA FIELD DETECTED.\n"
+				ELSE
+					STDOUT " NEBULA FIELD DETECTED -- OCCUPYING " + TotalSectorsNebula(playerPos.xCluster, playerPos.yCluster) + "/300 SECTORS.\n"
+				ENDIF
+				IF StarsInCluster(playerPos.xCluster, playerPos.yCluster) = 0
+					STDOUT " NO STARS DETECTED.\n"
+				ELSE
+					STDOUT " " + StarsInCluster(playerPos.xCluster, playerPos.yCluster) + " TOTAL STAR(S) DETECTED.\n"
+				ENDIF
+			ELSE
+				STDOUT " UNABLE TO SCAN REMAINING SPACE.\n"
+			ENDIF
+			STDOUT "\n"
+			BREAK
+		ELSEIF scanMethod$ = "2"
+			STDOUT " Z+PAN*:Z+PAN*:Z+PAN*\n"
+			STDOUT " ------:------:------\n"
+			FOR y = playerPos.yCluster - 1 TO playerPos.yCluster + 1
+				STDOUT " "
+				FOR x = playerPos.xCluster - 1 TO playerPos.xCluster + 1
+					IF x >= 1 AND x <= 20 AND y >= 1 AND y <= 20
+						bGround = 0
+						IF x = playerPos.xCluster AND y = playerPos.yCluster
+							bGround = 8
+						ENDIF
+						IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+							IF ZylonsInCluster(x, y) = 0
+								STDCOLOR 10, bGround
+							ELSE
+								STDCOLOR 12, bGround
+							ENDIF
+							STDOUT ZylonsInCluster(x, y)
+							IF StardockExistsInCluster(x, y)
+								STDCOLOR 14, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT StardockExistsInCluster(x, y)
+							IF PlanetExistsInCluster(x, y)
+								STDCOLOR 11, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT PlanetExistsInCluster(x, y)
+							IF AsteroidsExistInCluster(x, y)
+								STDCOLOR 13, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT AsteroidsExistInCluster(x, y)
+							IF NebulaExistsInCluster(x, y)
+								STDCOLOR 13, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT NebulaExistsInCluster(x, y)
+							STDCOLOR 10, bGround
+							STDOUT StarsInCluster(x, y)
+							// Whoa, dodged a bug here...
+							// If I didn't realize I needed this next line, the galaxy scan records
+							// would only be updated the first time this code was ever run
+							// Further down below, same thing.
+							galaxyScanRecords$[x][y] = "ABCDEF"
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "A", ZylonsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "B", StardockExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "C", PlanetExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "D", AsteroidsExistInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "E", NebulaExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "F", StarsInCluster(x, y))
+						ELSE
+							STDCOLOR 10, bGround
+							STDOUT "??????"
+							galaxyScanRecords$[x][y] = "??????"
+						ENDIF
+					ELSE
+						STDCOLOR 8, 0
+						STDOUT "******"
+					ENDIF
+					IF x < playerPos.xCluster + 1
+						STDCOLOR 10, 0
+						STDOUT ":"
+					ENDIF
+				NEXT
+				STDOUT "\n"
+				STDCOLOR 10, 0
+				STDOUT " ------:------:------\n"
+			NEXT
+			STDOUT "\n"
+			BREAK
+		ELSEIF scanMethod$ = "3"
+			STDOUT " Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*\n"
+			STDOUT " ------:------:------:------:------\n"
+			FOR y = playerPos.yCluster - 2 TO playerPos.yCluster + 2
+				STDOUT " "
+				FOR x = playerPos.xCluster - 2 TO playerPos.xCluster + 2
+					IF x >= 1 AND x <= 20 AND y >= 1 AND y <= 20
+						bGround = 0
+						IF x = playerPos.xCluster AND y = playerPos.yCluster
+							bGround = 8
+						ENDIF
+						IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+							IF ZylonsInCluster(x, y) = 0
+								STDCOLOR 10, bGround
+							ELSE
+								STDCOLOR 12, bGround
+							ENDIF
+							STDOUT ZylonsInCluster(x, y)
+							IF StardockExistsInCluster(x, y)
+								STDCOLOR 14, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT StardockExistsInCluster(x, y)
+							IF PlanetExistsInCluster(x, y)
+								STDCOLOR 11, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT PlanetExistsInCluster(x, y)
+							IF AsteroidsExistInCluster(x, y)
+								STDCOLOR 13, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT AsteroidsExistInCluster(x, y)
+							IF NebulaExistsInCluster(x, y)
+								STDCOLOR 13, bGround
+							ELSE
+								STDCOLOR 10, bGround
+							ENDIF
+							STDOUT NebulaExistsInCluster(x, y)
+							STDCOLOR 10, bGround
+							STDOUT StarsInCluster(x, y)
+							galaxyScanRecords$[x][y] = "ABCDEF"
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "A", ZylonsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "B", StardockExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "C", PlanetExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "D", AsteroidsExistInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "E", NebulaExistsInCluster(x, y))
+							galaxyScanRecords$[x][y] = REPLACE$(galaxyScanRecords$[x][y], "F", StarsInCluster(x, y))
+						ELSE
+							STDCOLOR 10, bGround
+							STDOUT "??????"
+							galaxyScanRecords$[x][y] = "??????"
+						ENDIF
+					ELSE
+						STDCOLOR 8, 0
+						STDOUT "******"
+					ENDIF
+					IF x < playerPos.xCluster + 2
+						STDCOLOR 10, 0
+						STDOUT ":"
+					ENDIF
+				NEXT
+				STDOUT "\n"
+				STDCOLOR 10, 0
+				STDOUT " ------:------:------:------:------\n"
+			NEXT
+			STDOUT "\n"
+			BREAK
+		ELSEIF scanMethod$ = "4"
+			FOR a = 0 TO 3
+				quadSigCount[a] = 0
+			NEXT
+			FOR a = 1 TO zylonsTotal
+				IF zylons[a].structInt <> 0
+					IF zylons[a].cloakEngaged = FALSE
+						IF zylons[a].yCluster <= 10
+							IF zylons[a].xCluster <= 10
+								INC quadSigCount[0]
+							ELSE
+								INC quadSigCount[1]
+							ENDIF
+						ELSE
+							IF zylons[a].xCluster <=10
+								INC quadSigCount[2]
+							ELSE
+								INC quadSigCount[3]
+							ENDIF
+						ENDIF
+					ENDIF
+				ENDIF
+			NEXT
+			STDOUT " SUMMARY OF DEEP GALAXY SCAN FOR ENEMY VESSELS (UNCLOAKED):\n"
+			STDOUT "\n"
+			FOR a = 0 TO 3
+				SELECT a
+					CASE 0
+						STDOUT " ALPHA "
+					CASE 1
+						STDOUT "  BETA "
+					CASE 2
+						STDOUT " GAMMA "
+					CASE 3
+						STDOUT " DELTA "
+				ENDSELECT
+				STDOUT "QUADRANT: "
+				IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+					STDOUT quadSigCount[a] + " SIGNATURE(S) DETECTED\n"
+				ELSE
+					STDOUT "UNKNOWN\n"
+				ENDIF
+			NEXT
+			STDOUT "\n"
+			BREAK
+		ELSE
+			IF scanMethod$ <> "5"
+				STDOUT " ILLEGAL CHOICE.  PLEASE TYPE A NUMBER FROM 1 - 5.\n\n"
+			ENDIF
+		ENDIF
+	UNTIL scanMethod$ = "5"
+
+	IF INSTR("1234", scanMethod$) <> -1
+		IF powerMain > 0
+			DEC powerMain, (RND(9) + 1) * INTEGER(scanMethod$)
+			IF powerMain < 0 THEN powerMain = 0
+			IF powerMain = 0
+				STDOUT " REPORT FROM CONTROL ROOM:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("MAIN POWER DEPLETED, SWITCHING TO AUXILIARY POWER.") + quote$ + "\n\n"
+			ENDIF
+		ELSE
+			DEC powerAux, (RND(9) + 1) * INTEGER(scanMethod$)
+			IF powerAux < 0 THEN powerAux = 0
+		ENDIF
+	ENDIF
+
+ENDSUB
+
+SUB Command_SelfDestruct:
+
+	LOCAL inputString$
+	LOCAL name$
+	LOCAL pw$
+	LOCAL finalCode$
+	LOCAL a%
+
+	STDOUT " >>> STARSHIP SELF-DESTRUCT MECHANISM ON-LINE AND READY <<<\n\n"
+
+	STDOUT " >>> WARNING: THIS WILL DESTROY THE SHIP, SURVIVAL IMPOSSIBLE <<<\n\n"
+
+	STDOUT " >>> RECOMMENDED AS WORST-CASE SCENARIO OPTION ONLY <<<\n\n"
+
+	REPEAT
+		STDOUT " DO YOU WISH TO INITIATE THE SELF-DESTRUCT SEQUENCE (Y/N)? "
+		inputString$ = STDIN$()
+		inputString$ = UCASE$(TRIM$(inputString$))
+	UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+
+	STDOUT "\n"
+
+	IF LEFT$(inputString$, 1) = "N" THEN RETURN
+
+	STDOUT " AUTHORIZATION IS REQUIRED IN ORDER TO INITIATE SELF-DESTRUCTION.\n\n"
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR NAME: "
+		name$ = STDIN$()
+		name$ = UCASE$(TRIM$(name$))
+	UNTIL LEN(name$) >= 1 AND LEN(name$) <= 25
+
+	REPEAT
+		STDOUT " PLEASE ENTER YOUR SELF-DESTRUCT CLEARANCE PASSCODE: "
+		pw$ = STDIN$()
+		pw$ = UCASE$(TRIM$(pw$))
+	UNTIL LEN(pw$) >= 1 AND LEN(pw$) <= 25
+
+	IF name$ <> playerName$ OR pw$ <> selfDestructPasscode$
+		STDCOLOR 12, 0
+		STDOUT "\n >>> ACCESS DENIED <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	FOR a = 1 TO 10
+		IF RND(9) >= 5
+			finalCode$ = finalCode$ + CHR$(RND(25) + 65)
+		ELSE
+			finalCode$ = finalCode$ + CHR$(RND(9) + 48)
+		ENDIF
+	NEXT
+
+	STDOUT "\n AS A FINAL SECURITY PRECAUTION, PLEASE ENTER\n"
+	STDOUT " THE FOLLOWING CODE EXACTLY AS DISPLAYED:\n\n"
+
+	STDCOLOR 14, 0
+	STDOUT "\t\t\t" + finalCode$ + "\n\n"
+	STDCOLOR 10, 0
+
+	REPEAT
+		STDOUT " ENTER FINAL CODE: "
+		inputString$ = STDIN$()
+		inputString$ = UCASE$(TRIM$(inputString$))
+	UNTIL LEN(inputString$) = 10
+
+	STDOUT "\n"
+
+	IF inputString$ <> finalCode$
+		STDCOLOR 12, 0
+		STDOUT " >>> ACCESS DENIED <<<\n\n"
+		STDCOLOR 10, 0
+		RETURN
+	ENDIF
+
+	STDOUT " >>> SELF-DESTRUCT SEQUENCE HAS BEEN INITIATED <<<\n\n"
+
+	FOR a = 30 TO 0 STEP -1
+		IF a = 30
+			STDOUT " THE SHIP WILL SELF-DESTRUCT IN T-MINUS 30 SECONDS...\n"
+		ELSEIF a <= 29 AND a >= 16
+			STDOUT " " + a + "...\n"
+		ELSEIF a = 15
+			STDOUT " THE SHIP WILL SELF-DESTRUCT IN T-MINUS 15 SECONDS...\n"
+		ELSE
+			STDOUT " " + a + "...\n"
+		ENDIF
+		Pause(1000)
+	NEXT
+
+	STDOUT "\n"
+
+	shields = 0
+	structInt = 0
+	selfDestroyed = TRUE
+
+	STDCOLOR 12, 0
+
+	STDOUT " *********************************\n"
+	STDOUT " ***                           ***\n"
+	STDOUT " *** STARSHIP AURORA DESTROYED ***\n"
+	STDOUT " ***                           ***\n"
+	STDOUT " *********************************\n\n"
+
+	// Any Zylons in the current cluster?  They get wiped out, too.
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].structInt <> 0
+			IF zylons[a].xCluster = playerPos.xCluster AND zylons[a].yCluster = playerPos.yCluster
+				DEC zylonsRemaining
+				STDOUT " *** ZYLON WARRIOR DESTROYED ***\n\n"
+			ENDIF
+		ENDIF
+	NEXT
+
+	STDCOLOR 10, 0
+
+ENDSUB
+
+SUB Command_SmartBomb:
+
+	LOCAL inputString$
+	LOCAL damPerZylon%
+	LOCAL z%
+	LOCAL x%
+	LOCAL y%
+
+	z = ZylonsInCluster(playerPos.xCluster, playerPos.yCluster)
+
+	IF z = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CAPTAIN, THERE APPEARS TO BE NO ENEMY SHIPS IN THIS CLUSTER.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF systems[SYS_SMART] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("SMART BOMB IS INOPERATIVE, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF smartBomb = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("SMART BOMB HAS ALREADY BEEN DEPLOYED, WEAPON UNAVAILABLE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	IF cloakEngaged = TRUE
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("WEAPONS ARE UNAVAILABLE WHEN CLOAKING DEVICE IS ACTIVE.") + quote$ + "\n\n"
+		RETURN
+	ENDIF
+
+	STDOUT " SMART BOMB DELIVERY SYSTEM ON-LINE AND READY.\n"
+
+	IF systems[SYS_SMART] < 10000
+		STDOUT " DAMAGE TO THE SYSTEM MAY AFFECT OUTCOME.\n"
+	ENDIF
+
+	STDOUT "\n"
+
+	damPerZylon = 10000 / z
+	DEC damPerZylon, INTEGER((RND(249) + 1) * (10000.0 / systems[SYS_SMART]))
+	IF damPerZylon < 0 THEN damPerZylon = 0
+
+	IF RND(9999) + 1 <= systems[SYS_SMART]
+		STDOUT " CALCULATIONS INDICATE " + damPerZylon + " UNIT(S) OF DAMAGE PER ENEMY SHIP.\n\n"
+	ELSE
+		STDOUT " COMPUTER DAMAGE PROHIBITS CALCULATION OF DAMAGE PER ENEMY SHIP.\n\n"
+	ENDIF
+
+	REPEAT
+		STDOUT " DO YOU WISH TO DEPLOY THE SMART BOMB (Y/N)? "
+		inputString$ = STDIN$()
+		inputString$ = UCASE$(TRIM$(inputString$))
+	UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+
+	STDOUT "\n"
+
+	IF LEFT$(inputString$, 1) = "N" THEN RETURN
+
+	// Should cloaked enemy ships be destroyed?
+	// Maybe not in this case; the cloaking device protects a Zylon from this weapon, unlike lasers and missiles.
+
+	FOR y = 1 TO 10
+		FOR x = 1 TO 30
+			IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+				IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+					DamageZylon(playerPos.xCluster, playerPos.yCluster, x, y, damPerZylon, WEAPON_SMART)
+				ENDIF
+			ENDIF
+		NEXT
+	NEXT
+
+	smartBomb = 0
+
+ENDSUB
+
+SUB Command_Status:
+
+	LOCAL condition$
+
+	STDOUT " CURRENT STATUS REPORT:\n\n"
+
+	STDOUT " STARDATE:                " + FORMAT$(0, 2, starDate / 100.0) + "\n"
+	STDOUT " CONDITION:               "
+	condition$ = GetCurrentCondition$()
+	IF condition$ = "RED"
+		STDCOLOR 12, 0
+	ELSEIF condition$ = "YELLOW"
+		STDCOLOR 14, 0
+	ENDIF
+	STDOUT condition$ + "\n"
+	STDCOLOR 10, 0
+	STDOUT " STRUCTURAL INTEGRITY:    " + FORMAT$(0, 2, structInt / 100.0) + "%\n"
+	STDOUT " CLOAKING DEVICE:         "
+	IF cloakEngaged = TRUE
+		STDOUT "ACTIVE\n"
+	ELSE
+		STDOUT "INACTIVE\n"
+	ENDIF
+	STDOUT " TOTAL CREW MEMBERS:      " + crewMembers + "\n"
+	STDOUT " CREW CASUALTIES:         " + casualties + "\n"
+	STDOUT " TOTAL ENEMY SHIPS:       " + zylonsTotal + "\n"
+	STDOUT " ENEMIES REMAINING:       " + zylonsRemaining + "\n"
+	STDOUT " TOTAL STARDOCKS:         " + stardocksTotal + "\n"
+	STDOUT " STARDOCKS REMAINING:     " + stardocksRemaining + "\n"
+	STDOUT " TOTAL PLANETS IN GALAXY: " + planetsTotal + "\n"
+	STDOUT "                  TYPE I: " + planetsInhabited + " (" + planetsDestroyed + " DESTROYED)\n"
+	STDOUT " TOTAL ASTEROID FIELDS:   " + totalAsteroidPatches + "\n"
+	STDOUT " TOTAL NEBULA FIELDS:     " + totalNebulaPatches + "\n"
+	STDOUT " TOTAL STARS:             " + totalStars + "\n\n"
+
+ENDSUB
+
+SUB Command_Viewport:
+
+	LOCAL condition$
+	LOCAL x%
+	LOCAL y%
+
+	IF systems[SYS_SCANNERS] = 0
+		STDOUT " REPORT FROM TACTICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("SCANNERS INOPERATIVE, UNABLE TO CONSTRUCT VISUAL READOUT OF CLUSTER.") + quote$ + "\n\n"
+	ENDIF
+
+	IF systems[SYS_SCANNERS] < 10000
+		STDOUT " DAMAGE TO THE SCANNERS MAY DISTORT VISUAL READOUT.\n\n"
+	ENDIF
+
+	STDOUT " VISUAL LAYOUT OF CURRENT CLUSTER:\n\n"
+
+	condition$ = GetCurrentCondition$()
+
+	STDOUT " "
+
+	IF condition$ = "GREEN"
+		STDCOLOR 15, 2
+		STDOUT "CONDITION:               GREEN"
+	ELSEIF condition$ = "YELLOW"
+		STDCOLOR 14, 6
+		STDOUT "CONDITION:              YELLOW"
+	ELSE
+		STDCOLOR 15, 4
+		STDOUT "CONDITION:                 RED"
+	ENDIF
+
+	STDCOLOR 10, 0
+
+	STDOUT "\n ------------------------------\n"
+
+	FOR y = 1 TO 10
+		STDOUT " "
+		FOR x = 1 TO 30
+			IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_NEB_OCCUPIED
+				IF x = playerPos.xSector AND y = playerPos.ySector
+					IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+						IF cloakEngaged = TRUE
+							STDCOLOR 2, 0
+						ELSE
+							STDCOLOR 10, 0
+						ENDIF
+						STDOUT "@"
+						STDCOLOR 10, 0
+					ELSE
+						STDOUT "?"
+					ENDIF
+				ELSE
+					IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+						STDOUT "N"
+					ELSE
+						STDOUT "?"
+					ENDIF
+				ENDIF
+			ELSE
+				IF x = playerPos.xSector AND y = playerPos.ySector
+					IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+						IF cloakEngaged = TRUE
+							STDCOLOR 2, 0
+						ELSE
+							STDCOLOR 10, 0
+						ENDIF
+						STDOUT "@"
+						STDCOLOR 10, 0
+					ELSE
+						STDOUT "?"
+					ENDIF
+				ELSE
+					IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] = GAL_ZYLON
+						IF ZylonIsCloaked(playerPos.xCluster, playerPos.yCluster, x, y) = FALSE
+							IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+								STDOUT "Z"
+							ELSE
+								STDOUT "?"
+							ENDIF
+						ELSE
+							STDOUT " "
+						ENDIF
+					ELSE
+						IF galaxy[playerPos.xCluster][playerPos.yCluster][x][y] <> GAL_EMPTY
+							IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+								STDOUT galaxySymbols$[galaxy[playerPos.xCluster][playerPos.yCluster][x][y]]
+							ELSE
+								STDOUT "?"
+							ENDIF
+						ELSE
+							STDOUT " "
+						ENDIF
+					ENDIF
+				ENDIF
+			ENDIF
+		NEXT
+		STDOUT "\n"
+	NEXT
+
+	STDOUT " ------------------------------\n\n"
+
+	IF powerMain > 0
+		DEC powerMain, RND(19) + 1
+		IF powerMain < 0 THEN powerMain = 0
+		IF powerMain = 0
+			STDOUT " REPORT FROM CONTROL ROOM:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("MAIN POWER DEPLETED, SWITCHING TO AUXILIARY POWER.") + quote$ + "\n\n"
+		ENDIF
+	ELSE
+		DEC powerAux, RND(19) + 1
+		IF powerAux < 0 THEN powerAux = 0
+	ENDIF
+
+ENDSUB
+
+SUB GalaxyPopulate:
+
+	// Here is where we fill the galaxy with stuff and set up the player.
+
+	LOCAL xCluster%
+	LOCAL yCluster%
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL rndNum1%
+	LOCAL rndNum2%
+	LOCAL a%
+	LOCAL b%
+	LOCAL c%
+
+	STDOUT " PLEASE WAIT, POPULATING GALAXY..."
+
+	IF showFunnyPauseComment = TRUE
+		STDOUT "\n\n (INSERTING OBLIGATORY PAUSE TO MAKE IT SEEM COMPUTATIONALLY-INTENSIVE...)"
+	ENDIF
+
+	// First clear the galaxy if this is not the first run.
+
+	FOR xCluster = 1 TO 20
+		FOR yCluster = 1 TO 20
+			FOR xSector = 1 TO 30
+				FOR ySector = 1 TO 10
+					galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+					galaxyNebula[xCluster][yCluster][xSector][ySector] = GAL_NEB_EMPTY
+				NEXT
+			NEXT
+		NEXT
+	NEXT
+
+	// First we'll do large swaths of asteroids and nebulas; it's easier when the galaxy is empty.
+
+	totalAsteroidPatches = RND(20)
+
+	FOR a = 1 TO totalAsteroidPatches
+		REPEAT
+			xCluster = RND(19) + 1
+			yCluster = RND(19) + 1
+		UNTIL AsteroidsExistInCluster(xCluster, yCluster) = 0
+		c = RND(75) + 25
+		FOR b = 1 TO c
+			REPEAT
+				xSector = RND(29) + 1
+				ySector = RND(9) + 1
+			UNTIL galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+			galaxy[xCluster][yCluster][xSector][ySector] = GAL_ASTEROID
+		NEXT
+	NEXT
+
+	totalNebulaPatches = RND(20)
+
+	FOR a = 1 TO totalNebulaPatches
+		REPEAT
+			xCluster = RND(19) + 1
+			yCluster = RND(19) + 1
+		UNTIL AsteroidsExistInCluster(xCluster, yCluster) = 0 AND NebulaExistsInCluster(xCluster, yCluster) = 0
+		c = RND(75) + 25
+		FOR b = 1 TO c
+			REPEAT
+				xSector = RND(29) + 1
+				ySector = RND(9) + 1
+			UNTIL galaxyNebula[xCluster][yCluster][xSector][ySector] = GAL_NEB_EMPTY
+			galaxyNebula[xCluster][yCluster][xSector][ySector] = GAL_NEB_OCCUPIED
+		NEXT
+	NEXT
+
+	// Now the player (Starship Aurora).
+
+	REPEAT
+		xCluster = RND(19) + 1
+		yCluster = RND(19) + 1
+	UNTIL AsteroidsExistInCluster(xCluster, yCluster) = 0 AND NebulaExistsInCluster(xCluster, yCluster) = 0
+
+	playerPos.xCluster = xCluster
+	playerPos.yCluster = yCluster
+	playerPos.xSector = RND(29) + 1
+	playerPos.ySector = RND(9) + 1
+
+	galaxy[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_AURORA
+	fuel = 10000
+	powerMain = 10000
+	powerAux = 2500
+	shields = 10000
+	structInt = 10000
+	laserUnits = 10000
+	missiles = 5
+	smartBomb = 1
+	cloakEnergy = 10000
+	cloakEngaged = FALSE
+	lifeSupportUnits = 10000
+	lifeSupportUnitsReserve = 2500
+	crewMembers = RND(200) + 50
+	casualties = 0
+
+	FOR a = 1 TO 11
+		systems[a] = 10000
+	NEXT
+
+	// Zylons.
+
+	zylonsTotal = RND(8) + 8
+	zylonsRemaining = zylonsTotal
+
+	DIM zylons[zylonsTotal + 1]
+
+	FOR a = 1 TO zylonsTotal
+		REPEAT
+			REPEAT
+				xCluster = RND(19) + 1
+				yCluster = RND(19) + 1
+			UNTIL xCluster <> playerPos.xCluster OR yCluster <> playerPos.yCluster
+		UNTIL ZylonsInCluster(xCluster, yCluster) < 9 AND AsteroidsExistInCluster(xCluster, yCluster) = 0 AND NebulaExistsInCluster(xCluster, yCluster) = 0
+		REPEAT
+			xSector = RND(29) + 1
+			ySector = RND(9) + 1
+		UNTIL galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+		galaxy[xCluster][yCluster][xSector][ySector] = GAL_ZYLON
+		zylons[a].xCluster = xCluster
+		zylons[a].yCluster = yCluster
+		zylons[a].xSector = xSector
+		zylons[a].ySector = ySector
+		zylons[a].fuel = 10000
+		zylons[a].shieldsMaxCap = RND(9000) + 1000
+		zylons[a].shields = zylons[a].shieldsMaxCap
+		// Should structural integrity be less than 10,000?
+		// Maybe not; we'll reduce Zylon structural capacity at a greater rate than the Aurora.
+		zylons[a].structInt = 10000
+		zylons[a].pulseUnits = 10000
+		IF RND(99) + 1 <= 25
+			zylons[a].particleBeam = TRUE
+		ELSE
+			zylons[a].particleBeam = FALSE
+		ENDIF
+		zylons[a].cloakEnergy = 10000
+		zylons[a].cloakEngaged = FALSE
+		zylons[a].canHack% = TRUE
+	NEXT
+
+	// Stardocks.
+
+	stardocksTotal = RND(5) + 4
+	stardocksRemaining = stardocksTotal
+
+	DIM stardocks[stardocksTotal + 1]
+
+	FOR a = 1 TO stardocksTotal
+		REPEAT
+			xCluster = RND(19) + 1
+			yCluster = RND(19) + 1
+		UNTIL StardockExistsInCluster(xCluster, yCluster) = 0 AND AsteroidsExistInCluster(xCluster, yCluster) = 0 AND NebulaExistsInCluster(xCluster, yCluster) = 0
+		REPEAT
+			xSector = RND(29) + 1
+			ySector = RND(9) + 1
+		UNTIL galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+		galaxy[xCluster][yCluster][xSector][ySector] = GAL_STARDOCK
+		stardocks[a].xCluster = xCluster
+		stardocks[a].yCluster = yCluster
+		stardocks[a].xSector = xSector
+		stardocks[a].ySector = ySector
+		stardocks[a].shields = 10000
+		stardocks[a].structInt = 10000
+		stardocks[a].repairCap = 50000
+		stardocks[a].refuelCap = 50000
+	NEXT
+
+	// Planets.
+
+	planetsTotal = RND(75) + 25
+	planetsInhabited = 0
+	planetsDestroyed = 0
+
+	DIM planets[planetsTotal + 1]
+
+	FOR a = 1 TO planetsTotal
+		REPEAT
+			xCluster = RND(19) + 1
+			yCluster = RND(19) + 1
+		UNTIL PlanetExistsInCluster(xCluster, yCluster) = 0 AND AsteroidsExistInCluster(xCluster, yCluster) = 0 AND NebulaExistsInCluster(xCluster, yCluster) = 0
+		REPEAT
+			xSector = RND(29) + 1
+			ySector = RND(9) + 1
+		UNTIL galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+		galaxy[xCluster][yCluster][xSector][ySector] = GAL_PLANET
+		planets[a].xCluster = xCluster
+		planets[a].yCluster = yCluster
+		planets[a].xSector = xSector
+		planets[a].ySector = ySector
+		rndNum1 = RND(9) + 1
+		SELECT rndNum1
+			CASE 1 TO 2
+				planets[a].planetType = PLANET_TYPE_1
+				planets[a].population = RND(45000000) + 5000000		// Ranges from 5 million to 50 million.
+				planets[a].casualties = 0
+				planets[a].techLevel = RND(4) + 1
+				INC planetsInhabited
+				REPEAT
+					planets[a].atmosphere.nitrogen = RND(10) + 75
+					planets[a].atmosphere.oxygen = RND(10) + 15
+				UNTIL planets[a].atmosphere.nitrogen + planets[a].atmosphere.oxygen < 100
+				planets[a].atmosphere.co2 = 100 - planets[a].atmosphere.nitrogen - planets[a].atmosphere.oxygen
+				planets[a].atmosphere.hydrogen = 0
+				planets[a].atmosphere.helium = 0
+				planets[a].atmosphere.methane = 0
+			CASE 3 TO 4
+				planets[a].planetType = PLANET_TYPE_2	// Inhabitable, but with no people.
+				planets[a].population = 0
+				planets[a].casualties = 0
+				planets[a].techLevel = TECH_NONE
+				REPEAT
+					planets[a].atmosphere.nitrogen = RND(10) + 75
+					planets[a].atmosphere.oxygen = RND(10) + 15
+				UNTIL planets[a].atmosphere.nitrogen + planets[a].atmosphere.oxygen < 100
+				planets[a].atmosphere.co2 = 100 - planets[a].atmosphere.nitrogen - planets[a].atmosphere.oxygen
+				planets[a].atmosphere.hydrogen = 0
+				planets[a].atmosphere.helium = 0
+				planets[a].atmosphere.methane = 0
+			CASE 5 TO 10
+				planets[a].planetType = PLANET_TYPE_3	// Uninhabitable.
+				planets[a].population = 0
+				planets[a].casualties = 0
+				planets[a].techLevel = TECH_NONE
+				planets[a].atmosphere.nitrogen = 0
+				planets[a].atmosphere.oxygen = 0
+				planets[a].atmosphere.co2 = 0
+				planets[a].atmosphere.hydrogen = 0
+				planets[a].atmosphere.helium = 0
+				planets[a].atmosphere.methane = 0
+				FOR b = 1 TO 100
+					rndNum2 = RND(5) + 1
+					SELECT rndNum2
+						CASE 1
+							INC planets[a].atmosphere.nitrogen
+						CASE 2
+							INC planets[a].atmosphere.oxygen
+						CASE 3
+							INC planets[a].atmosphere.co2
+						CASE 4
+							INC planets[a].atmosphere.hydrogen
+						CASE 5
+							INC planets[a].atmosphere.helium
+						CASE 6
+							INC planets[a].atmosphere.methane
+					ENDSELECT
+				NEXT
+		ENDSELECT
+	NEXT
+
+	// Finally, stars.
+
+	totalStars = RND(900) + 100
+
+	FOR a = 1 TO totalStars
+		REPEAT
+			xCluster = RND(19) + 1
+			yCluster = RND(19) + 1
+		UNTIL StarsInCluster(xCluster, yCluster) < 9
+		REPEAT
+			xSector = RND(29) + 1
+			ySector = RND(9) + 1
+		UNTIL galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY AND galaxyNebula[xCluster][yCluster][xSector][ySector] = GAL_NEB_EMPTY
+		galaxy[xCluster][yCluster][xSector][ySector] = GAL_STAR
+	NEXT
+
+	starDate = 10000
+
+	// I might not even need this next FOR/NEXT loop,
+	// since I assign "ABCDEF" during the scans,
+	// but I'll keep it here anyway.
+
+	FOR xCluster = 1 TO 20
+		FOR yCluster = 1 TO 20
+			galaxyScanRecords$[xCluster][yCluster] = "ABCDEF"
+		NEXT
+	NEXT
+
+	// Determine skill level.
+	// The higher the number, the harder the skill.
+	// Ranges from 2 to 9.
+
+	SELECT zylonsTotal
+		CASE 8 TO 10
+			skill = 1
+		CASE 11 TO 13
+			skill = 2
+		CASE 14 TO 16
+			skill = 3
+	ENDSELECT
+
+	SELECT stardocksTotal
+		CASE 4 TO 5
+			INC skill, 3
+		CASE 6 TO 7
+			INC skill, 2
+		CASE 8 TO 9
+			INC skill, 1
+	ENDSELECT
+
+	IF planetsInhabited < 10 THEN INC skill
+	IF totalAsteroidPatches + totalNebulaPatches >= 30 THEN INC skill
+	IF crewMembers < 100 THEN INC skill
+
+	IF showFunnyPauseComment = TRUE
+		Pause(3000)
+		showFunnyPauseComment = FALSE
+	ENDIF
+
+	gameOverTrigger = FALSE
+	selfDestroyed = FALSE
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB GameEntry:
+
+	LOCAL command$
+	LOCAL commandOkay%
+	LOCAL timeStart%
+	LOCAL timeStop%
+	LOCAL inputString$
+	LOCAL quit%
+	LOCAL z%
+
+	IF loadSuccess = FALSE
+
+		// New game, not a saved one, so we have to set it up.
+
+		GOSUB GalaxyPopulate
+
+		STDOUT " ===========================================\n"
+		STDOUT " >                                         <\n"
+		STDOUT " >>                                       <<\n"
+		STDOUT " >>> INTERGALACTIC ALLIANCE HEADQUARTERS <<<\n"
+		STDOUT " >>                                       <<\n"
+		STDOUT " >                                         <\n"
+		STDOUT " ===========================================\n\n"
+
+		STDOUT " WELCOME ABOARD THE STARSHIP AURORA, CAPTAIN.  WE APPRECIATE YOUR SERVICE.\n"
+		STDOUT " YOUR MISSION IS TO DESTROY THE " + zylonsTotal + " ZYLON WARRIORS INFILTRATING OUR GALAXY.\n"
+		STDOUT " THERE ARE " + stardocksTotal + " STARDOCKS AT YOUR DISPOSAL FOR REFUELING/REPAIRING YOUR VESSEL,\n"
+		STDOUT " AND YOU HAVE " + crewMembers + " CREW MEMBERS READY TO ASSIST YOU.\n"
+		STDOUT " THE ANTICIPATED SKILL LEVEL TO REACH YOUR GOAL IS RANKED: " + GetSkillLevel$(skill) + ".\n\n"
+
+		// Get ID and passcodes.
+
+		REPEAT
+			STDOUT " ENTER YOUR LAST NAME FOR I.D. PURPOSES (25 CHARS MAX): "
+			playerName$ = STDIN$()
+			playerName$ = UCASE$(TRIM$(playerName$))
+		UNTIL LEN(playerName$)
+
+		IF LEN(playerName$) > 25 THEN playerName$ = LEFT$(playerName$, 25)
+
+		STDOUT "\n"
+
+		REPEAT
+			STDOUT " ENTER DESIRED AUTHORIZATION PASSCODE\n"
+			STDOUT " FOR REFUEL/REPAIR ORDERS (25 CHARS MAX): "
+			stardockPasscode$ = STDIN$()
+			stardockPasscode$ = UCASE$(TRIM$(stardockPasscode$))
+			STDOUT "\n"
+		UNTIL LEN(stardockPasscode$)
+
+		IF LEN(stardockPasscode$) > 25 THEN stardockPasscode$ = LEFT$(stardockPasscode$, 25)
+
+		REPEAT
+			STDOUT " ENTER DESIRED AUTHORIZATION PASSCODE\n"
+			STDOUT " FOR SELF-DESTRUCT MECHANISM (25 CHARS MAX): "
+			selfDestructPasscode$ = STDIN$()
+			selfDestructPasscode$ = UCASE$(TRIM$(selfDestructPasscode$))
+			STDOUT "\n"
+		UNTIL LEN(selfDestructPasscode$)
+
+		IF LEN(selfDestructPasscode$) > 25 THEN selfDestructPasscode$ = LEFT$(selfDestructPasscode$, 25)
+
+		STDOUT " THE COMMAND TERMINAL IS YOUR INTERFACE TO THE SHIP.\n"
+		STDOUT " TYPE " + quote$ + "HELP" + quote$ + " OR " + quote$ + "?" + quote$ + " AT THE PROMPT FOR ASSISTANCE.\n\n"
+
+		STDOUT " YOU BEGIN YOUR ASSIGNMENT IN THE " + GetQuadrantName$(playerPos.xCluster, playerPos.yCluster) + " QUADRANT, CLUSTER (" + playerPos.xCluster + ", " + playerPos.yCluster + ").\n\n"
+
+		STDOUT " GOOD LUCK, CAPTAIN " + playerName$ + ".\n\n"
+
+	ENDIF
+
+	// Main command entry loop.
+
+	quit = FALSE
+
+	REPEAT
+		timeStart = GETTIMERALL()
+		REPEAT
+			STDOUT " ENTER COMMAND: "
+			command$ = STDIN$()
+			command$ = UCASE$(TRIM$(command$))
+		UNTIL LEN(command$)
+		STDOUT "\n"
+		commandOkay = TRUE
+		IF command$ = "NAV" OR command$ = "NAVIGATE"
+			GOSUB Command_Navigate
+		ELSEIF command$ = "LOC" OR command$ = "LOCATION"
+			GOSUB Command_Location
+		ELSEIF command$ = "VIEW" OR command$ = "VIEWPORT"
+			GOSUB Command_Viewport
+		ELSEIF command$ = "SCAN"
+			GOSUB Command_Scan
+		ELSEIF command$ = "LAS" OR command$ = "LASER"
+			GOSUB Command_Laser
+		ELSEIF command$ = "MIS" OR command$ = "MISSILE"
+			GOSUB Command_Missile
+		ELSEIF command$ = "SMA" OR command$ = "SMART BOMB" OR command$ = "SMART-BOMB"
+			GOSUB Command_SmartBomb
+		ELSEIF command$ = "HACK"
+			GOSUB Command_Hack
+		ELSEIF command$ = "CLO" OR command$ = "CLOAK"
+			GOSUB Command_Cloak
+		ELSEIF command$ = "STAT" OR command$ = "STATUS"
+			GOSUB Command_Status
+		ELSEIF command$ = "INV" OR command$ = "INVENTORY"
+			GOSUB Command_Inventory
+		ELSEIF command$ = "DAM" OR command$ = "DAMAGE"
+			GOSUB Command_DamageReport
+		ELSEIF command$ = "REF" OR command$ = "REFUEL"
+			GOSUB Command_Refuel
+		ELSEIF command$ = "REP" OR command$ = "REPAIR"
+			GOSUB Command_Repair
+		ELSEIF command$ = "EXC" OR command$ = "EXCHANGE"
+			GOSUB Command_Exchange
+		ELSEIF command$ = "COM" OR command$ = "COMPUTER"
+			GOSUB Command_Computer
+		ELSEIF command$ = "SELF-DESTRUCT" OR command$ = "SELF DESTRUCT"
+			GOSUB Command_SelfDestruct
+		ELSEIF command$ = "SAVE"
+			GOSUB Command_Save
+		ELSEIF command$ = "HELP" OR command$ = "?"
+			GOSUB Command_Help
+		//ELSEIF command$ = "ZYLONS"
+		//	GOSUB Command_Debug_Zylons
+		//ELSEIF command$ = "ID"
+		//	GOSUB Command_Debug_ID
+		//ELSEIF command$ = "KILLALL"
+		//	GOSUB Command_Debug_KillAll
+		ELSE
+			IF command$ = "QUIT"
+				REPEAT
+					STDOUT " A GAME IS IN SESSION.  ARE YOU SURE YOU WANT TO QUIT (Y/N)? "
+					inputString$ = STDIN$()
+					inputString$ = UCASE$(TRIM$(inputString$))
+				UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+				STDOUT "\n"
+				IF LEFT$(inputString$, 1) = "Y" THEN quit = TRUE
+			ELSE
+				STDOUT " COMMAND NOT RECOGNIZED.  TYPE " + quote$ + "HELP" + quote$ + " FOR ASSISTANCE.\n\n"
+				commandOkay = FALSE
+			ENDIF
+		ENDIF
+		IF command$ <> "SAVE" AND command$ <> "HELP" AND command$ <> "?" AND command$ <> "QUIT"
+			IF commandOkay = TRUE
+				IF zylonsRemaining = 0
+					IF selfDestroyed = TRUE OR structInt <> 0
+						GOSUB GameWon
+						BREAK
+					ENDIF
+				ENDIF
+				IF structInt <> 0
+					FOR z = 1 TO zylonsTotal
+						IF RND(99) + 1 <= 5
+							ZylonMove(z)
+						ELSE
+							ZylonIdle(z)
+						ENDIF
+						ZylonCloak(z)
+						ZylonRecharge(z)
+					NEXT
+					IF cloakEngaged = FALSE THEN GOSUB ZylonsAttackStarship
+					GOSUB ZylonsAttackStardocks
+					GOSUB ZylonsAttackPlanets
+					timeStop = GETTIMERALL()
+					INC starDate, INTEGER((timeStop - timeStart) / 100.0)
+					IF command$ <> "NAV" AND command$ <> "NAVIGATE" THEN GOSUB Idle
+				ENDIF
+				GOSUB GameOverCheck
+				IF gameOverTrigger <> FALSE
+					GOSUB GameLost
+					BREAK
+				ENDIF
+			ENDIF
+		ENDIF
+	UNTIL quit = TRUE
+
+ENDSUB
+
+SUB GameLoad:
+
+	LOCAL fn$
+	LOCAL err$
+	LOCAL okay%
+	LOCAL channel%
+	LOCAL byte%
+	LOCAL sum#
+	LOCAL checkSum%
+	LOCAL fileLen%
+	LOCAL xCluster%
+	LOCAL yCluster%
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL a%
+	LOCAL ln%
+	LOCAL str$
+
+	loadSuccess = FALSE
+
+	STDOUT " Please provide a file name below.\n\n"
+
+	STDOUT " If drive and/or path is not specified, file will be\n"
+	STDOUT " loaded from same directory as the program executable.\n\n"
+
+	REPEAT
+		STDOUT " Enter file name: "
+		fn$ = STDIN$()
+		fn$ = UCASE$(TRIM$(fn$))
+	UNTIL LEN(fn$)
+
+	STDOUT "\n Loading..."
+
+	IF DOESFILEEXIST(fn$)
+		fileLen = GETFILESIZE(fn$)
+		IF fileLen >= 243236 AND fileLen <= 245044	// TODO: Update this as necessary.
+			okay = OPENFILE(channel, fn$, 1)
+			IF okay
+				TRY
+					FILESEEK channel, fileLen - 1, 0
+					READUBYTE channel, checkSum
+					FILESEEK channel, 0, 0
+					READSTR channel, str$, 40
+					IF str$ = "*** SUPER SPACE CADET SAVE GAME FILE ***"
+						FILESEEK channel, 0, 0
+						sum = 0
+						FOR a = 1 TO fileLen - 1
+							READUBYTE channel, byte
+							INC sum, byte
+						NEXT
+						IF checkSum = MOD(sum, 256)
+							FILESEEK channel, 40, 0
+							FOR xCluster = 1 TO 20
+								FOR yCluster = 1 TO 20
+									FOR xSector = 1 TO 30
+										FOR ySector = 1 TO 10
+											READUBYTE channel, galaxy[xCluster][yCluster][xSector][ySector]
+										NEXT
+									NEXT
+								NEXT
+							NEXT
+							FOR xCluster = 1 TO 20
+								FOR yCluster = 1 TO 20
+									FOR xSector = 1 TO 30
+										FOR ySector = 1 TO 10
+											READUBYTE channel, galaxyNebula[xCluster][yCluster][xSector][ySector]
+										NEXT
+									NEXT
+								NEXT
+							NEXT
+							FOR xCluster = 1 TO 20
+								FOR yCluster = 1 TO 20
+									READSTR channel, galaxyScanRecords$[xCluster][yCluster], 6
+								NEXT
+							NEXT
+							READUBYTE channel, ln
+							READSTR channel, playerName$, ln
+							READUBYTE channel, ln
+							READSTR channel, stardockPasscode$, ln
+							READUBYTE channel, ln
+							READSTR channel, selfDestructPasscode$, ln
+							READULONG channel, starDate
+							READUBYTE channel, playerPos.xCluster
+							READUBYTE channel, playerPos.yCluster
+							READUBYTE channel, playerPos.xSector
+							READUBYTE channel, playerPos.ySector
+							READUWORD channel, fuel
+							READUWORD channel, powerMain
+							READUWORD channel, powerAux
+							READUWORD channel, shields
+							READUWORD channel, structInt
+							READUWORD channel, laserUnits
+							READUBYTE channel, missiles
+							READUBYTE channel, smartBomb
+							READUWORD channel, cloakEnergy
+							READUBYTE channel, cloakEngaged
+							READUWORD channel, lifeSupportUnits
+							READUWORD channel, lifeSupportUnitsReserve
+							FOR a = 1 TO 11
+								READUWORD channel, systems[a]
+							NEXT
+							READUBYTE channel, crewMembers
+							READUBYTE channel, casualties
+							READUBYTE channel, zylonsTotal
+							READUBYTE channel, zylonsRemaining
+							DIM zylons[zylonsTotal + 1]
+							FOR a = 1 TO zylonsTotal
+								READUBYTE channel, zylons[a].xCluster
+								READUBYTE channel, zylons[a].yCluster
+								READUBYTE channel, zylons[a].xSector
+								READUBYTE channel, zylons[a].ySector
+								READUBYTE channel, zylons[a].fuel
+								READSHORTIEEE channel, zylons[a].shieldsMaxCap
+								READSHORTIEEE channel, zylons[a].shields
+								READUWORD channel, zylons[a].structInt
+								READUWORD channel, zylons[a].pulseUnits
+								READUBYTE channel, zylons[a].particleBeam
+								READUWORD channel, zylons[a].cloakEnergy
+								READUBYTE channel, zylons[a].cloakEngaged
+								READUBYTE channel, zylons[a].canHack
+							NEXT
+							READUBYTE channel, stardocksTotal
+							READUBYTE channel, stardocksRemaining
+							DIM stardocks[stardocksTotal + 1]
+							FOR a = 1 TO stardocksTotal
+								READUBYTE channel, stardocks[a].xCluster
+								READUBYTE channel, stardocks[a].yCluster
+								READUBYTE channel, stardocks[a].xSector
+								READUBYTE channel, stardocks[a].ySector
+								READUWORD channel, stardocks[a].shields
+								READUWORD channel, stardocks[a].structInt
+								READUWORD channel, stardocks[a].refuelCap
+								READUWORD channel, stardocks[a].repairCap
+							NEXT
+							READUBYTE channel, planetsTotal
+							READUBYTE channel, planetsInhabited
+							READUBYTE channel, planetsDestroyed
+							DIM planets[planetsTotal + 1]
+							FOR a = 1 TO planetsTotal
+								READUBYTE channel, planets[a].xCluster
+								READUBYTE channel, planets[a].yCluster
+								READUBYTE channel, planets[a].xSector
+								READUBYTE channel, planets[a].ySector
+								READUBYTE channel, planets[a].planetType
+								READULONG channel, planets[a].population
+								READULONG channel, planets[a].casualties
+								READUBYTE channel, planets[a].techLevel
+								READUBYTE channel, planets[a].atmosphere.nitrogen
+								READUBYTE channel, planets[a].atmosphere.oxygen
+								READUBYTE channel, planets[a].atmosphere.co2
+								READUBYTE channel, planets[a].atmosphere.hydrogen
+								READUBYTE channel, planets[a].atmosphere.helium
+								READUBYTE channel, planets[a].atmosphere.methane
+							NEXT
+							READUBYTE channel, totalAsteroidPatches
+							READUBYTE channel, totalNebulaPatches
+							READUWORD channel, totalStars
+							READUBYTE channel, skill
+							loadSuccess = TRUE
+							gameOverTrigger = FALSE
+							selfDestroyed = FALSE
+							STDOUT "\n\n Saved game successfully loaded."
+						ELSE
+							STDOUT "\n\n Error -- not a Super Space Cadet game file."
+						ENDIF
+					ELSE
+						STDOUT "\n\n Error -- not a Super Space Cadet game file."
+					ENDIF
+				CATCH err$
+					STDOUT "\n\n Error -- unable to load game file."
+				FINALLY
+			ELSE
+				STDOUT "\n\n Error -- unable to open game file."
+			ENDIF
+		ELSE
+			STDOUT "\n\n Error -- not a Super Space Cadet game file."
+		ENDIF
+	ELSE
+		STDOUT "\n\n Error -- game file not found."
+	ENDIF
+
+	CLOSEFILE channel
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB GameLost:
+
+	STDCOLOR 12, 0
+
+	IF gameOverTrigger = GAME_OVER_STARSHIP_DESTROYED AND selfDestroyed = FALSE
+		STDOUT " *********************************\n"
+		STDOUT " ***                           ***\n"
+		STDOUT " *** STARSHIP AURORA DESTROYED ***\n"
+		STDOUT " ***                           ***\n"
+		STDOUT " *********************************\n\n"
+	ENDIF
+
+	STDOUT " >>> MISSION FAILED -- "
+
+	SELECT gameOverTrigger
+		CASE GAME_OVER_STARSHIP_DESTROYED
+			IF selfDestroyed = FALSE
+				STDOUT "YOUR VESSEL HAS BEEN DESTROYED"
+			ELSE
+				STDOUT "FAILED TO TAKE OUT ZYLON FLEET"
+			ENDIF
+		CASE GAME_OVER_NO_FUEL
+			STDOUT "YOU HAVE RUN OUT OF FUEL"
+		CASE GAME_OVER_NO_POWER
+			STDOUT "YOU HAVE RUN OUT OF POWER"
+		CASE GAME_OVER_NO_LIFE_SUPPORT
+			STDOUT "YOU HAVE RUN OUT OF LIFE SUPPORT"
+		CASE GAME_OVER_ALL_PROP_FAT_DAM
+			STDOUT "ALL PROPULSION SYSTEMS FATALLY DAMAGED"
+		CASE GAME_OVER_LIFE_SUPPORT_FAT_DAM
+			STDOUT "LIFE SUPPORT SYSTEM FATALLY DAMAGED"
+		CASE GAME_OVER_ALL_CREW_KILLED
+			STDOUT "ALL PERSONNEL ON-BOARD HAVE BEEN KILLED"
+		CASE GAME_OVER_ALL_PLANETS_DESTROYED
+			STDOUT "ALL INHABITED PLANETS HAVE BEEN DESTROYED"
+		CASE GAME_OVER_ALL_STARDOCKS_DESTROYED
+			STDOUT "ALL STARDOCKS HAVE BEEN DESTROYED"
+	ENDSELECT
+
+	STDOUT " <<<\n\n"
+
+	STDCOLOR 10, 0
+
+	IF selfDestroyed = TRUE
+		STDOUT " SORRY, BUT IT LOOKS LIKE YOUR SACRIFICE WAS IN VAIN.\n\n"
+	ENDIF
+
+	STDOUT " BETTER LUCK NEXT TIME, CAPTAIN " + playerName$ + ".\n\n"
+
+	STDOUT " PRESS ANY KEY TO RETURN TO THE MAIN MENU..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB GameOverCheck:
+
+	IF structInt = 0
+		gameOverTrigger = GAME_OVER_STARSHIP_DESTROYED
+		RETURN
+	ENDIF
+
+	IF fuel = 0
+		gameOverTrigger = GAME_OVER_NO_FUEL
+		RETURN
+	ENDIF
+
+	IF powerMain + powerAux = 0
+		gameOverTrigger = GAME_OVER_NO_POWER
+		RETURN
+	ENDIF
+
+	IF lifeSupportUnits + lifeSupportUnitsReserve = 0
+		gameOverTrigger = GAME_OVER_NO_LIFE_SUPPORT
+		RETURN
+	ENDIF
+
+	IF systems[SYS_PROP_STANDARD] + systems[SYS_PROP_INTERSTELLAR] + systems[SYS_PROP_HYPER] = 0
+		gameOverTrigger = GAME_OVER_ALL_PROP_FAT_DAM
+		RETURN
+	ENDIF
+
+	IF systems[SYS_LIFE] = 0
+		gameOverTrigger = GAME_OVER_LIFE_SUPPORT_FAT_DAM
+		RETURN
+	ENDIF
+
+	IF casualties = crewMembers
+		gameOverTrigger = GAME_OVER_ALL_CREW_KILLED
+		RETURN
+	ENDIF
+
+	IF planetsDestroyed = planetsInhabited
+		gameOverTrigger = GAME_OVER_ALL_PLANETS_DESTROYED
+		RETURN
+	ENDIF
+
+	IF stardocksRemaining = 0
+		gameOverTrigger = GAME_OVER_ALL_STARDOCKS_DESTROYED
+		RETURN
+	ENDIF
+
+ENDSUB
+
+SUB GameWon:
+
+	LOCAL appData$
+	LOCAL okay%
+	LOCAL channel%
+	LOCAL time$
+	LOCAL cas#
+	LOCAL tot#
+	LOCAL a%
+
+	STDCOLOR 9, 0
+	STDOUT " ****************************\n"
+	STDOUT " ***                      ***\n"
+	STDOUT " *** "
+	STDCOLOR 15, 0
+	STDOUT "MISSION ACCOMPLISHED"
+	STDCOLOR 9, 0
+	STDOUT " ***\n"
+	STDOUT " ***                      ***\n"
+	STDOUT " ****************************\n\n"
+
+	STDCOLOR 11, 0
+
+	STDOUT " CONGRATULAIONS, CAPTAIN " + playerName$ + "."
+
+	IF selfDestroyed = TRUE
+		STDOUT "  YOUR SACRIFICE WAS NOT IN VAIN."
+	ENDIF
+
+	STDOUT "\n\n"
+
+	a = RND(3)
+
+	// TODO: Add more here if possible.
+
+	SELECT a
+		CASE 0
+			STDOUT " YOU HAVE SAVED THE GALAXY FROM ZYLON ANNIHILATION."
+		CASE 1
+			STDOUT " YOU HAVE SAVED THE GALAXY FROM A ZYLON TAKEOVER."
+		CASE 2
+			STDOUT " YOU HAVE SAVED THE GALAXY FROM THE ZYLON THREAT."
+		CASE 3
+			STDOUT " THE EVIL PLANS OF THE ZYLONS HAVE BEEN THWARTED."
+	ENDSELECT
+
+	STDOUT "\n\n"
+
+	STDOUT " THE ALLIANCE IS FOREVER IN YOUR DEBT.\n\n"
+
+	STDOUT " YOUR NAME WILL NOW GO DOWN IN THE RECORD BOOKS.\n\n"
+
+	appData$ = PLATFORMINFO$("APPDATA")
+
+	okay = CREATEDIR(appData$ + "\\Super Space Cadet")
+
+	okay = OPENFILE(channel, appData$ + "\\Super Space Cadet\\Mission Log.dat", -1)
+
+	IF okay
+		WRITESTR channel, playerName$
+		IF LEN(playerName$) < 25
+			FOR a = 1 TO 25 - LEN(playerName$)
+				WRITESTR channel, " "
+			NEXT
+		ENDIF
+		WRITEUBYTE channel, skill
+		time$ = PLATFORMINFO$("TIME")
+		WRITESTR channel, LEFT$(time$, 10)
+		WRITEULONG channel, starDate
+		WRITEUBYTE channel, selfDestroyed
+		WRITEUBYTE channel, zylonsTotal
+		WRITEUBYTE channel, stardocksRemaining
+		WRITEUBYTE channel, stardocksTotal
+		cas = casualties
+		WRITEUBYTE channel, 100 - INTEGER((cas / crewMembers) * 100)
+		tot = 0
+		cas = 0
+		FOR a = 1 TO planetsTotal
+			IF planets[a].planetType = PLANET_TYPE_1
+				INC tot, planets[a].population
+				INC cas, planets[a].casualties
+			ENDIF
+		NEXT
+		WRITEUBYTE channel, 100 - INTEGER((cas / tot) * 100)
+		// One record is 46 bytes?
+	ENDIF
+
+	CLOSEFILE channel
+
+	STDOUT " PRESS ANY KEY TO RETURN TO THE MAIN MENU..."
+
+	GOSUB PressAnyKey
+
+	STDCOLOR 10, 0
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB Idle:
+
+	// Routine that reduces starship's resources apart from navigation.
+
+	DEC fuel, RND(4) + 1
+	IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+		DEC fuel, RND(4) + 1
+	ENDIF
+	IF fuel < 0 THEN fuel = 0
+	IF powerMain > 0
+		DEC powerMain, RND(4) + 1
+		IF powerMain < 0 THEN powerMain = 0
+		IF powerMain = 0
+			STDOUT " REPORT FROM CONTROL ROOM:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("MAIN POWER DEPLETED, SWITCHING TO AUXILIARY POWER.") + quote$ + "\n\n"
+		ENDIF
+	ELSE
+		DEC powerAux, RND(4) + 1
+		IF powerAux < 0 THEN powerAux = 0
+	ENDIF
+	IF galaxyNebula[playerPos.xCluster][playerPos.yCluster][playerPos.xSector][playerPos.ySector] = GAL_NEB_OCCUPIED
+		IF shields <> 0
+			DEC shields, RND(4) + 1
+			IF shields < 0 THEN shields = 0
+			STDOUT " REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("NEBULA PRESENT IN CURRENT SECTOR, SHIELDS DOWN TO " + shields + ".") + quote$ + "\n\n"
+		ENDIF
+	ENDIF
+	IF cloakEngaged = TRUE
+		DEC cloakEnergy, INTEGER((RND(4) + 1) * (10000.0 / systems[SYS_CLOAK]))
+		IF cloakEnergy < 0 THEN cloakEnergy = 0
+		IF cloakEnergy = 0
+			STDOUT " REPORT FROM TACTICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("CLOAK ENERGY DEPLETED, CLOAKING DEVICE AUTOMATICALLY DEACTIVATED.") + quote$ + "\n\n"
+			cloakEngaged = FALSE
+		ENDIF
+	ENDIF
+	IF lifeSupportUnits > 0
+		DEC lifeSupportUnits, INTEGER((RND(4) + 1) * (10000.0 / systems[SYS_LIFE]))
+		IF lifeSupportUnits < 0 THEN lifeSupportUnits = 0
+		IF lifeSupportUnits = 0
+			STDOUT " REPORT FROM MEDICAL:\n"
+			STDOUT "\n"
+			STDOUT " " + quote$ + Message$("PRIMARY LIFE SUPPORT DEPLETED, SWITCHING TO RESERVE LIFE SUPPORT.") + quote$ + "\n\n"
+		ENDIF
+	ELSE
+		DEC lifeSupportUnitsReserve, INTEGER((RND(4) + 1) * (10000.0 / systems[SYS_LIFE]))
+		IF lifeSupportUnitsReserve < 0 THEN lifeSupportUnitsReserve = 0
+	ENDIF
+
+ENDSUB
+
+SUB InitGlobals:
+
+	quote$ = CHR$(34)
+
+	galaxySymbols$[0] = " "
+	galaxySymbols$[1] = "@"
+	galaxySymbols$[2] = "Z"
+	galaxySymbols$[3] = "+"
+	galaxySymbols$[4] = "P"
+	galaxySymbols$[5] = "A"
+	galaxySymbols$[6] = "*"
+
+	galaxyDescriptStrings$[1] = "ZYLON WARRIOR"
+	galaxyDescriptStrings$[2] = "STARDOCK"
+	galaxyDescriptStrings$[3] = "PLANET"
+	galaxyDescriptStrings$[4] = "ASTEROID"
+	galaxyDescriptStrings$[5] = "STAR"
+
+	showFunnyPauseComment = TRUE
+
+	GOSUB SeedRandom
+
+ENDSUB
+
+SUB Introduction:
+
+	STDOUT " -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n"
+	STDOUT " Introduction to Super Space Cadet\n"
+	STDOUT " -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n\n"
+
+	STDOUT " Welcome to Super Space Cadet.  This is a turn-based, text/console-mode\n"
+	STDOUT " strategy game that pays homage to similar games such as Super Star Trek,\n"
+	STDOUT " which first appeared on mainframes and minicomputers decades ago.  It is\n"
+	STDOUT " essentially a clone, with various enhancements added to it.\n\n"
+
+	STDOUT " The premise of the game is that you are commander of a starship known as\n"
+	STDOUT " the Aurora, and you are fighting for a body known as the Intergalactic\n"
+	STDOUT " Alliance.  The galaxy you occupy is being invaded by a hostile warrior\n"
+	STDOUT " race known as the Zylons, and your objective is to destroy them all.\n\n"
+
+	STDOUT " Every game that you play will be somewhat unique, with different numbers\n"
+	STDOUT " of enemies and a different layout.  You play the game by typing commands\n"
+	STDOUT " and then viewing the results of your actions.  If you succeed in\n"
+	STDOUT " eliminating the enemy threat, the game is won.  If they destroy you\n"
+	STDOUT " first (or if certain other conditions arise, such as running out of\n"
+	STDOUT " fuel), then you will have failed in your mission.\n\n"
+
+	STDOUT " You can start a new game from the main menu, as well as access various\n"
+	STDOUT " other options.  During the game you can type " + quote$ + "HELP" + quote$ + " or " + quote$ + "?" + quote$ + " for a quick\n"
+	STDOUT " summary of all the commands that are available to you.  For a more\n"
+	STDOUT " detailed explanation of how the game works and how to play, please view\n"
+	STDOUT " the included documentation file.\n\n"
+
+	STDOUT " Have fun.\n\n"
+
+	STDOUT " Press any key to return to the main menu..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB Main:
+
+	LOCAL keyPress$
+
+	loadSuccess = FALSE
+
+	REPEAT
+
+		STDOUT " ===========\n"
+		STDOUT "  MAIN MENU \n"
+		STDOUT " ===========\n"
+		STDOUT "\n"
+		STDOUT " (1) Start new game\n"
+		STDOUT " (2) Load previously saved game\n"
+		STDOUT " (3) View past performance of completed missions\n"
+		STDOUT " (4) Clear mission performance log file\n"
+		STDOUT " (5) Brief introduction\n"
+		STDOUT " (6) Version number\n"
+		STDOUT " (7) Quit\n"
+		STDOUT "\n"
+		STDOUT " Type a number from 1 - 7 to enter your choice: "
+
+		REPEAT
+			keyPress$ = INKEY$()
+		UNTIL INSTR("1234567", keyPress$) >= 0 AND INSTR("1234567", keyPress$) <= 7
+
+		STDOUT keyPress$ + "\n\n"
+
+		SELECT keyPress$
+			CASE "1"
+				GOSUB GameEntry
+			CASE "2"
+				GOSUB GameLoad
+				IF loadSuccess = TRUE THEN GOSUB GameEntry
+			CASE "3"
+				GOSUB PastMissionsView
+			CASE "4"
+				GOSUB PastMissionsClear
+			CASE "5"
+				GOSUB Introduction
+			CASE "6"
+				GOSUB Version
+			CASE "7"
+				RETURN
+		ENDSELECT
+
+	UNTIL 0
+
+ENDSUB
+
+SUB PastMissionsClear:
+
+	LOCAL inputString$
+	LOCAL appData$
+	LOCAL fn$
+
+	appData$ = PLATFORMINFO$("APPDATA")
+	fn$ = appData$ + "\\Super Space Cadet\\Mission Log.dat"
+
+	IF DOESFILEEXIST(fn$)
+		REPEAT
+			STDOUT " Are you sure you want to clear the mission log file (y/n)? "
+			inputString$ = STDIN$()
+			inputString$ = UCASE$(TRIM$(inputString$))
+		UNTIL inputString$ = "Y" OR inputString$ = "YES" OR inputString$ = "N" OR inputString$ = "NO"
+		STDOUT "\n"
+		IF LEFT$(inputString$, 1) = "Y"
+			IF DOESFILEEXIST(fn$) THEN KILLFILE fn$
+			STDOUT " Mission log file has been erased.\n\n"
+		ELSE
+			RETURN
+		ENDIF
+	ELSE
+		STDOUT " File not present, no action necessary.\n\n"
+	ENDIF
+
+	STDOUT " Press any key to return to the main menu..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB PastMissionsView:
+
+	LOCAL appData$
+	LOCAL fn$
+	LOCAL okay%
+	LOCAL channel%
+	LOCAL fs%
+	LOCAL pName$
+	LOCAL sk%
+	LOCAL date$
+	LOCAL star%
+	LOCAL selfDest%
+	LOCAL z%
+	LOCAL sdRem%
+	LOCAL sdTot%
+	LOCAL crewSurv%
+	LOCAL planSurv%
+	LOCAL a%
+
+	appData$ = PLATFORMINFO$("APPDATA")
+	fn$ = appData$ + "\\Super Space Cadet\\Mission Log.dat"
+
+	IF DOESFILEEXIST(fn$)
+		fs = GETFILESIZE(fn$)
+		IF fs >= 46
+			IF MOD(fs, 46) = 0
+				okay = OPENFILE(channel, fn$, 1)
+				IF okay
+					STDOUT " -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n"
+					STDOUT " INTERGALACTIC ALLIANCE RECORDS OF COMPLETED MISSIONS\n"
+					STDOUT " -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n\n"
+					a = 0
+					REPEAT
+						INC a
+						READSTR channel, pName$, 25
+						pName$ = TRIM$(pName$)
+						READUBYTE channel, sk
+						READSTR channel, date$, 10
+						READULONG channel, star
+						READUBYTE channel, selfDest
+						READUBYTE channel, z
+						READUBYTE channel, sdRem
+						READUBYTE channel, sdTot
+						READUBYTE channel, crewSurv
+						READUBYTE channel, planSurv
+						STDOUT " Commanding officer:          " + pName$ + "\n"
+						STDOUT " Skill level:                 " + GetSkillLevel$(sk) + "\n"
+						STDOUT " Actual date:                 " + date$ + "\n"
+						STDOUT " Stardate completed:          " + FORMAT$(0, 2, star / 100.0) + "\n"
+						STDOUT " Sacrificed ship and self:    "
+						IF selfDest = TRUE
+							STDOUT "YES\n"
+						ELSE
+							STDOUT "NO\n"
+						ENDIF
+						STDOUT " Total Zylon ships destroyed: " + z + "\n"
+						STDOUT " Time per enemy ship:         " + FORMAT$(0, 2, ((star - 10000) / 100.0) / z) + " stardates\n"
+						STDOUT " Total stardocks remaining:   " + sdRem + "/" + sdTot + "\n"
+						STDOUT " Crew survival rate:          " + crewSurv + "%\n"
+						STDOUT " Planetary survival rate:     " + planSurv + "%\n\n"
+						IF a = 3 AND ENDOFFILE(channel) = FALSE
+							STDOUT " Press any key to continue..."
+							GOSUB PressAnyKey
+							a = 0
+							STDOUT "\n\n"
+						ENDIF
+					UNTIL ENDOFFILE(channel)
+					CLOSEFILE channel
+				ELSE
+					STDOUT " Sorry, no records to show.\n\n"
+				ENDIF
+			ELSE
+				STDOUT " Sorry, no records to show.\n\n"
+			ENDIF
+		ELSE
+			STDOUT " Sorry, no records to show.\n\n"
+		ENDIF
+	ELSE
+		STDOUT " Sorry, no records to show.\n\n"
+	ENDIF
+
+	STDOUT " Press any key to return to the main menu..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB PressAnyKey:
+
+	REPEAT
+	UNTIL LEN(INKEY$())
+
+ENDSUB
+
+SUB SeedRandom:
+
+	// See http://www.glbasic.com/forum/index.php?topic=4832.0 for the origin of this code.
+	// I ended up altering it slightly because I always got the same seed when running in Linux.
+
+	LOCAL time$
+	LOCAL timeArray$[]
+	LOCAL pieces%
+	LOCAL seed%
+	LOCAL a%
+
+	seed = 0
+
+	time$ = PLATFORMINFO$("TIME")
+	pieces = SPLITSTR(time$, timeArray$[], "- :")
+
+	FOR a = pieces - 1 TO 0 STEP -1
+		INC seed, INTEGER(timeArray$[a])
+	NEXT
+
+	SEEDRND seed
+
+ENDSUB
+
+SUB Version:
+
+	STDOUT " Version 1.01\n\n"
+
+	STDOUT " Press any key to return to the main menu..."
+
+	GOSUB PressAnyKey
+
+	STDOUT "\n\n"
+
+ENDSUB
+
+SUB WrapUp:
+
+	STDOUT " Thanks for playing.\n\n"
+
+ENDSUB
+
+SUB ZylonsAttackPlanets:
+
+	LOCAL unitsFire%
+	LOCAL unitsHit%
+	LOCAL casualties%
+	LOCAL dist1%
+	LOCAL dist2%
+	LOCAL distance#
+	LOCAL obstructed%
+	LOCAL xMove#
+	LOCAL yMove#
+	LOCAL x%
+	LOCAL y%
+	LOCAL p%
+	LOCAL z%
+	LOCAL a%
+
+	IF planetsInhabited = 0 THEN RETURN
+
+	FOR p = 1 TO planetsTotal
+		FOR z = 1 TO zylonsTotal
+			IF zylons[z].xCluster = planets[p].xCluster AND zylons[z].yCluster = planets[p].yCluster AND planets[p].casualties < planets[p].population
+				IF zylons[z].structInt <> 0
+					IF zylons[z].pulseUnits >= 100
+						IF zylons[z].cloakEngaged = FALSE
+							obstructed = FALSE
+							dist1 = ABS(zylons[z].xSector - planets[p].xSector)
+							dist2 = ABS(zylons[z].ySector - planets[p].ySector)
+							distance = MAX(dist1, dist2)
+							xMove = (planets[p].xSector - zylons[z].xSector) / distance
+							yMove = (planets[p].ySector - zylons[z].ySector) / distance
+							FOR a = 1 TO distance
+								x = INTEGER(zylons[z].xSector + (xMove * a))
+								y = INTEGER(zylons[z].ySector + (yMove * a))
+								IF galaxy[zylons[z].xCluster][zylons[z].yCluster][x][y] <> GAL_EMPTY AND galaxy[zylons[z].xCluster][zylons[z].yCluster][x][y] <> GAL_PLANET
+									obstructed = TRUE
+									BREAK
+								ENDIF
+							NEXT
+							IF obstructed = FALSE AND RND(9) >= 5
+								unitsFire = RND(2400) + 100
+								IF unitsFire > zylons[z].pulseUnits THEN unitsFire = zylons[z].pulseUnits
+								DEC zylons[z].pulseUnits, unitsFire
+								unitsHit = unitsFire - (distance * 5)
+								IF unitsHit < 0 THEN unitsHit = 0
+								casualties = unitsHit * RND(1000)
+								DEC casualties, planets[p].techLevel * RND(10000)
+								IF casualties < 0 THEN casualties = 0
+								IF casualties > planets[p].population - planets[p].casualties THEN casualties = planets[p].population - planets[p].casualties
+								STDOUT " REPORT FROM INTERGALACTIC ALLIANCE HEADQUARTERS:\n\n"
+								STDOUT " " + quote$ + Message$("THE PLANET IN CLUSTER (" + planets[p].xCluster + ", " + planets[p].yCluster + ") IS UNDER ATTACK.") + "\n"
+								STDOUT " " + Message$(unitsFire + " ZYLON PULSE UNIT(S) DETECTED BEING FIRED FROM SECTOR") + "\n"
+								STDOUT " " + Message$("(" + zylons[z].xSector + ", " + zylons[z].ySector + ").") + "  "
+								IF casualties = 0
+									STDOUT Message$("FORTUNATELY, THEY DID NOT EXPERIENCE ANY CASUALTIES.")
+								ELSE
+									STDOUT Message$("ESTIMATED CASUALTIES: " + casualties + ".")
+									INC planets[p].casualties, casualties
+									IF planets[p].casualties = planets[p].population
+										STDOUT "\n " + Message$("THERE ARE NO SURVIVORS REMAINING.")
+										INC planetsDestroyed
+										// Actually, wait...
+										// We don't really need to erase the planet from the galaxy.
+										// It will still be classified as a Type I planet, but with 100% casualties.
+										// galaxy[planets[p].xCluster][planets[p].yCluster][planets[p].xSector][planets[p].ySector] = GAL_EMPTY
+									ENDIF
+								ENDIF
+								STDOUT quote$ + "\n\n"
+							ENDIF
+						ENDIF
+					ENDIF
+				ENDIF
+			ENDIF
+		NEXT
+	NEXT
+
+ENDSUB
+
+SUB ZylonsAttackStardocks:
+
+	LOCAL unitsFire%
+	LOCAL unitsHit%
+	LOCAL dist1%
+	LOCAL dist2%
+	LOCAL distance#
+	LOCAL obstructed%
+	LOCAL xMove#
+	LOCAL yMove#
+	LOCAL x%
+	LOCAL y%
+	LOCAL s%
+	LOCAL z%
+	LOCAL a%
+
+	FOR s = 1 TO stardocksTotal
+		FOR z = 1 TO zylonsTotal
+			IF zylons[z].xCluster = stardocks[s].xCluster AND zylons[z].yCluster = stardocks[s].yCluster AND stardocks[s].structInt <> 0
+				IF zylons[z].structInt <> 0
+					IF zylons[z].pulseUnits >= 100
+						IF zylons[z].cloakEngaged = FALSE
+							obstructed = FALSE
+							dist1 = ABS(zylons[z].xSector - stardocks[s].xSector)
+							dist2 = ABS(zylons[z].ySector - stardocks[s].ySector)
+							distance = MAX(dist1, dist2)
+							xMove = (stardocks[s].xSector - zylons[z].xSector) / distance
+							yMove = (stardocks[s].ySector - zylons[z].ySector) / distance
+							FOR a = 1 TO distance
+								x = INTEGER(zylons[z].xSector + (xMove * a))
+								y = INTEGER(zylons[z].ySector + (yMove * a))
+								IF galaxy[zylons[z].xCluster][zylons[z].yCluster][x][y] <> GAL_EMPTY AND galaxy[zylons[z].xCluster][zylons[z].yCluster][x][y] <> GAL_STARDOCK
+									obstructed = TRUE
+									BREAK
+								ENDIF
+							NEXT
+							IF obstructed = FALSE AND RND(9) >= 5
+								unitsFire = RND(2400) + 100
+								IF unitsFire > zylons[z].pulseUnits THEN unitsFire = zylons[z].pulseUnits
+								DEC zylons[z].pulseUnits, unitsFire
+								unitsHit = unitsFire - (distance * 5)
+								IF unitsHit < 0 THEN unitsHit = 0
+								STDOUT " REPORT FROM INTERGALACTIC ALLIANCE HEADQUARTERS:\n\n"
+								STDOUT " " + quote$ + Message$("THE STARDOCK IN CLUSTER (" + stardocks[s].xCluster + ", " + stardocks[s].yCluster + ") IS UNDER ATTACK.") + "\n"
+								STDOUT " " + Message$(unitsFire + " ZYLON PULSE UNIT(S) DETECTED BEING FIRED FROM SECTOR (" + zylons[z].xSector + ", " + zylons[z].ySector + ").") + "\n"
+								IF unitsHit >= 1
+									IF stardocks[s].shields <> 0
+										DEC stardocks[s].shields, unitsHit
+										IF stardocks[s].shields >= 0
+											STDOUT " " + Message$("SHIELDS OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[s].shields / 100.0) + "%.") + quote$ + "\n\n"
+										ELSE
+											DEC stardocks[s].structInt, ABS(stardocks[s].shields)
+											stardocks[s].shields = 0
+											IF stardocks[s].structInt < 0 THEN stardocks[s].structInt = 0
+											STDOUT " " + Message$("SHIELDS OF STARDOCK REDUCED TO 0%.") + "\n"
+											STDOUT " " + Message$("STRUCTURAL INTEGRITY OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[s].structInt / 100.0) + "%.") + quote$ + "\n\n"
+										ENDIF
+									ELSE
+										DEC stardocks[s].structInt, unitsHit
+										IF stardocks[s].structInt < 0 THEN stardocks[s].structInt = 0
+										STDOUT " " + Message$("STRUCTURAL INTEGRITY OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[s].structInt / 100.0) + "%.") + quote$ + "\n\n"
+									ENDIF
+								ELSE
+									STDOUT " " + Message$("REPORTS INDICATE NO IMPACT UPON THE STARDOCK.") + quote$ + "\n\n"
+								ENDIF
+								IF stardocks[s].structInt = 0
+									DEC stardocksRemaining
+									galaxy[stardocks[s].xCluster][stardocks[s].yCluster][stardocks[s].xSector][stardocks[s].ySector] = GAL_EMPTY
+									STDCOLOR 12, 0
+									STDOUT " *** STARDOCK DESTROYED ***\n\n"
+									STDCOLOR 10, 0
+									IF stardocksRemaining = 1
+										STDOUT " REPORT FROM INTERGALACTIC ALLIANCE HEADQUARTERS:\n"
+										STDOUT "\n"
+										STDOUT " " + quote$ + Message$("A WORD OF WARNING, CAPTAIN: YOU HAVE ONE STARDOCK LEFT.") + quote$ + "\n\n"
+									ENDIF
+								ENDIF
+							ENDIF
+						ENDIF
+					ENDIF
+				ENDIF
+			ENDIF
+		NEXT
+	NEXT
+
+ENDSUB
+
+SUB ZylonsAttackStarship:
+
+	// This routine will be called after every command gets done executing;
+	// it will loop through every Zylon that exists in the player's cluster
+	// to determine if it will attack.
+
+	// Beforehand, it should be determined if the Aurora is cloaked,
+	// therefore preventing this routine from being called.
+
+	LOCAL unitsFire%
+	LOCAL unitsHit%
+	LOCAL unitsOfDamage%
+	LOCAL oldStructInt%
+	LOCAL dist1%
+	LOCAL dist2%
+	LOCAL distance#
+	LOCAL obstructed%
+	LOCAL xMove#
+	LOCAL yMove#
+	LOCAL x%
+	LOCAL y%
+	LOCAL a%
+	LOCAL b%
+	LOCAL c%
+
+	oldStructInt = structInt
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].xCluster = playerPos.xCluster AND zylons[a].yCluster = playerPos.yCluster
+			IF zylons[a].structInt <> 0
+				IF zylons[a].cloakEngaged = FALSE
+					IF zylons[a].pulseUnits >= 100
+						obstructed = FALSE
+						dist1 = ABS(zylons[a].xSector - playerPos.xSector)
+						dist2 = ABS(zylons[a].ySector - playerPos.ySector)
+						distance = MAX(dist1, dist2)
+						xMove = (playerPos.xSector - zylons[a].xSector) / distance
+						yMove = (playerPos.ySector - zylons[a].ySector) / distance
+						FOR b = 1 TO distance
+							x = INTEGER(zylons[a].xSector + (xMove * b))
+							y = INTEGER(zylons[a].ySector + (yMove * b))
+							IF galaxy[zylons[a].xCluster][zylons[a].yCluster][x][y] <> GAL_EMPTY AND galaxy[zylons[a].xCluster][zylons[a].yCluster][x][y] <> GAL_AURORA
+								obstructed = TRUE
+								BREAK
+							ENDIF
+						NEXT
+						IF obstructed = FALSE AND RND(9) >= 5
+							IF zylons[a].particleBeam = TRUE AND RND(99) + 1 <= 25
+								unitsFire = 5000
+								zylons[a].particleBeam = FALSE
+							ELSE
+								unitsFire = RND(2400) + 100
+								IF unitsFire > zylons[a].pulseUnits THEN unitsFire = zylons[a].pulseUnits
+								DEC zylons[a].pulseUnits, unitsFire
+							ENDIF
+							unitsHit = unitsFire - (distance * 5)
+							IF unitsHit < 0 THEN unitsHit = 0
+							STDCOLOR 12, 0
+							STDOUT " >>> STARSHIP AURORA UNDER ATTACK <<<\n"
+							STDCOLOR 10, 0
+							IF unitsFire <= 2500
+								STDOUT " " + unitsFire + " PULSE UNIT(S) FIRED FROM ZYLON AT SECTOR (" + zylons[a].xSector + ", " + zylons[a].ySector + ").\n"
+							ELSE
+								STDOUT " 5000 PARTICLE BEAM UNITS FIRED FROM ZYLON AT SECTOR (" + zylons[a].xSector + ", " + zylons[a].ySector + ").\n"
+							ENDIF
+							IF unitsHit >= 1
+								STDOUT " STARSHIP STRUCK WITH " + unitsHit + " UNIT(S).\n"
+								IF shields <> 0
+									DEC shields, unitsHit
+									IF shields >= 0
+										STDOUT " SHIELDS OF STARSHIP REDUCED TO " + shields + ".\n\n"
+										// Shields protect Starship from damage.
+									ELSE
+										DEC structInt, ABS(shields)
+										unitsOfDamage = ABS(shields)
+										shields = 0
+										IF structInt < 0 THEN structInt = 0
+										STDOUT " SHIELDS OF STARSHIP REDUCED TO 0.\n"
+										STDOUT " STRUCTURAL INTEGRITY OF STARSHIP REDUCED TO " + FORMAT$(0, 2, structInt / 100.0) + "%.\n"
+										CalculateDamageToStarship(unitsOfDamage)
+										IF structInt = 0 THEN BREAK
+									ENDIF
+								ELSE
+									DEC structInt, unitsHit
+									unitsOfDamage = unitsHit
+									IF structInt < 0 THEN structInt = 0
+									STDOUT " STRUCTURAL INTEGRITY OF STARSHIP REDUCED TO " + FORMAT$(0, 2, structInt / 100.0) + "%.\n"
+									CalculateDamageToStarship(unitsOfDamage)
+									IF structInt = 0 THEN BREAK
+								ENDIF
+							ELSE
+								STDOUT " CONTROL ROOM REPORTS NO IMPACT ON STARSHIP.\n\n"
+							ENDIF
+						ENDIF
+					ENDIF
+				ENDIF
+			ENDIF
+		ENDIF
+	NEXT
+
+	// TODO: Add a greater variety of messages here if I think of more.
+
+	IF oldStructInt >= 5000 AND structInt < 5000 AND structInt >= 2500
+		STDOUT " REPORT FROM ENGINEERING:\n"
+		STDOUT "\n"
+		c = RND(2)
+		SELECT c
+			CASE 0
+				STDOUT " " + quote$ + Message$("SHE WON'T HOLD!  SHE'S BREAKING UP!") + quote$ + "\n\n"
+			CASE 1
+				STDOUT " " + quote$ + Message$("THE SHIP WON'T TAKE MANY MORE OF THOSE, CAPTAIN!") + quote$ + "\n\n"
+			CASE 2
+				STDOUT " " + quote$ + Message$("THE SHIP COULD BREAK APART ANY MINUTE, CAPTAIN!") + quote$ + "\n\n"
+		ENDSELECT
+	ELSEIF oldStructInt >= 2500 AND structInt < 2500
+		STDOUT " REPORT FROM ENGINEERING:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("CORE BREACH IMMINENT, CAPTAIN.") + quote$ + "\n\n"
+	ENDIF
+
+ENDSUB
+
+FUNCTION AsteroidsExistInCluster%: xCluster%, yCluster%
+
+	LOCAL xSector%
+	LOCAL ySector%
+
+	FOR xSector = 1 TO 30
+		FOR ySector = 1 TO 10
+			IF galaxy[xCluster][yCluster][xSector][ySector] = GAL_ASTEROID
+				RETURN 1
+			ENDIF
+		NEXT
+	NEXT
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION CalculateDamageToStarship%: unitsOfDamage%
+
+	LOCAL sysToDamage%
+	LOCAL oldCas%
+	LOCAL cas%
+
+	REPEAT
+		IF DamageTotal() = 0 THEN BREAK
+		REPEAT
+			sysToDamage = RND(10) + 1
+		UNTIL systems[sysToDamage] <> 0
+		IF systems[sysToDamage] >= unitsOfDamage
+			DEC systems[sysToDamage], unitsOfDamage
+			STDOUT " " + LEFT$(GetSystemName$(sysToDamage), INSTR(GetSystemName$(sysToDamage), ":")) + " DOWN TO " + FORMAT$(0, 2, systems[sysToDamage] / 100.0) + "% OPERATING CAPACITY.\n"
+			IF systems[SYS_CLOAK] = 0
+				IF cloakEngaged = TRUE
+					STDOUT " CLOAKING SYSTEM FATALLY DAMAGED, DEVICE AUTOMATICALLY DISENGAGING.\n"
+					cloakEngaged = FALSE
+				ENDIF
+			ENDIF
+			BREAK
+		ELSE
+			DEC unitsOfDamage, systems[sysToDamage]
+			systems[sysToDamage] = 0
+			STDOUT " " + LEFT$(GetSystemName$(sysToDamage), INSTR(GetSystemName$(sysToDamage), ":")) + " DOWN TO " + FORMAT$(0, 2, systems[sysToDamage] / 100.0) + "% OPERATING CAPACITY.\n"
+			IF systems[SYS_CLOAK] = 0
+				IF cloakEngaged = TRUE
+					STDOUT " CLOAKING SYSTEM FATALLY DAMAGED, DEVICE AUTOMATICALLY DISENGAGING.\n"
+					cloakEngaged = FALSE
+				ENDIF
+			ENDIF
+		ENDIF
+	UNTIL 0
+
+	oldCas = casualties
+
+	IF RND(9) >= 5
+		// Let there be some casualties as a result of this attack.
+		IF lifeSupportUnits > 0
+			cas = INTEGER((RND(4) + 1) * (10000.0 / systems[SYS_LIFE]) * (10000.0 / lifeSupportUnits))
+			IF cas > crewMembers - casualties THEN cas = crewMembers - casualties
+			INC casualties, cas
+			STDOUT " NUMBER OF CASUALTIES SUSTAINED: " + cas + ".\n"
+		ELSE
+			cas = INTEGER((RND(4) + 1) * (10000.0 / systems[SYS_LIFE]) * (2500.0 / lifeSupportUnitsReserve))
+			IF cas > crewMembers - casualties THEN cas = crewMembers - casualties
+			INC casualties, cas
+			STDOUT " NUMBER OF CASUALTIES SUSTAINED: " + cas + ".\n"
+		ENDIF
+	ENDIF
+
+	STDOUT "\n"
+
+	// TODO: Add a greater variety of messages here if I think of more.
+
+	IF crewMembers - oldCas >= 25 AND crewMembers - casualties < 25
+		STDOUT " REPORT FROM MEDICAL:\n"
+		STDOUT "\n"
+		STDOUT " " + quote$ + Message$("WE CANNOT SUSTAIN MUCH FURTHER LOSS OF LIFE, CAPTAIN!") + quote$ + "\n\n"
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION DamageTotal%:
+
+	// This function simply adds all system[] values together and returns it.
+	// If it returns a 0, then that means every single system is fatally damaged.
+
+	LOCAL damTotal%
+	LOCAL a%
+
+	damTotal = 0
+
+	FOR a = 1 TO 11
+		INC damTotal, systems[a]
+	NEXT
+
+	RETURN damTotal
+
+ENDFUNCTION
+
+FUNCTION DamageZylon%: xCluster%, yCluster%, xSector%, ySector%, units%, weaponType%
+
+	LOCAL distance%
+	LOCAL backlashImpact%
+	LOCAL unitsOfDamage%
+	LOCAL a%
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].xCluster = xCluster AND zylons[a].yCluster = yCluster AND zylons[a].xSector = xSector AND zylons[a].ySector = ySector
+			BREAK
+		ENDIF
+	NEXT
+
+	IF weaponType = WEAPON_LASER
+		// Adjust for distance.
+		distance = DistanceFun(playerPos.xSector, playerPos.ySector, zylons[a].xSector, zylons[a].ySector)
+		DEC units, distance * 5
+		IF units < 0 THEN units = 0
+	ENDIF
+
+	STDOUT " " + units + " UNIT(S) STRUCK ON ZYLON WARRIOR AT SECTOR (" + xSector + ", " + ySector + ").\n"
+
+	IF units >= 1
+		IF zylons[a].shields <> 0
+			DEC zylons[a].shields, units
+			IF zylons[a].shields >= 0
+				IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+					STDOUT " SHIELDS OF ENEMY SHIP REDUCED TO " + FORMAT$(0, 2, (zylons[a].shields / zylons[a].shieldsMaxCap) * 100) + "%.\n\n"
+				ELSE
+					STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON ENEMY SHIP.\n\n"
+				ENDIF
+			ELSE
+				DEC zylons[a].structInt, ABS(zylons[a].shields) * 3		// Update this as necessary; structural integrity gets reduced faster.
+				zylons[a].shields = 0
+				IF zylons[a].structInt < 0 THEN zylons[a].structInt = 0
+				IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+					STDOUT " SHIELDS OF ENEMY SHIP REDUCED TO 0%.\n"
+					STDOUT " STRUCTURAL INTEGRITY OF ENEMY SHIP REDUCED TO " + FORMAT$(0, 2, zylons[a].structInt / 100.0) + "%.\n\n"
+				ELSE
+					STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON ENEMY SHIP.\n\n"
+				ENDIF
+			ENDIF
+		ELSE
+			DEC zylons[a].structInt, units * 3	// Update this as necessary; structural integrity gets reduced faster.
+			IF zylons[a].structInt < 0 THEN zylons[a].structInt = 0
+			IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+				STDOUT " STRUCTURAL INTEGRITY OF ENEMY SHIP REDUCED TO " + FORMAT$(0, 2, zylons[a].structInt / 100.0) + "%.\n\n"
+			ELSE
+				STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON ENEMY SHIP.\n\n"
+			ENDIF
+		ENDIF
+	ELSE
+		IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+			STDOUT " TACTICAL REPORTS NO DAMAGE DONE TO ENEMY SHIP.\n\n"
+		ELSE
+			STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON ENEMY SHIP.\n\n"
+		ENDIF
+	ENDIF
+
+	IF zylons[a].structInt = 0
+		STDCOLOR 12, 0
+		STDOUT " *** ZYLON WARRIOR DESTROYED ***\n\n"
+		STDCOLOR 10, 0
+		galaxy[xCluster][yCluster][xSector][ySector] = GAL_EMPTY
+		DEC zylonsRemaining
+		IF ABS(playerPos.xSector - xSector) <= 1 AND ABS(playerPos.ySector - ySector) <= 1
+			// Backlash on the Aurora; enemy was only one sector away.
+			IF weaponType = WEAPON_SMART
+				// Game over; smart bomb backfired and Starship is destroyed.
+				STDCOLOR 12, 0
+				STDOUT " >>> SMART BOMB DETONATED ONLY ONE SECTOR AWAY <<<\n\n"
+				STDCOLOR 10, 0
+				shields = 0
+				structInt = 0
+			ELSE
+				// Inflict damage from laser/missile backlash; doesn't necessarily destroy the Starship.
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("CAPTAIN, WE HAVE EXPERIENCED SOME BACKLASH FROM THE NEARBY") + "\n"
+				STDOUT " " + Message$("DESTROYED ENEMY SHIP.") + "  "
+				backlashImpact = RND(4000) + 1000
+				IF shields <> 0
+					DEC shields, backlashImpact
+					IF shields >= 0
+						STDOUT Message$("SHIELDS HAVE BEEN REDUCED TO " + shields + ".") + quote$ + "\n\n"
+					ELSE
+						DEC structInt, ABS(shields)
+						unitsOfDamage = ABS(shields)
+						shields = 0
+						IF structInt < 0 THEN structInt = 0
+						STDOUT Message$("SHIELDS HAVE BEEN REDUCED TO 0,") + "\n"
+						STDOUT " " + Message$("AND STRUCTURAL INTEGRITY IS DOWN TO " + FORMAT$(0, 2, structInt / 100.0) + "%.") + quote$ + "\n\n"
+						CalculateDamageToStarship(unitsOfDamage)
+					ENDIF
+				ELSE
+					unitsOfDamage = backlashImpact
+					DEC structInt, unitsOfDamage
+					IF structInt < 0 THEN structInt = 0
+					STDOUT Message$("STRUCTURAL INTEGRITY IS DOWN TO " + FORMAT$(0, 2, structInt / 100.0) + "%.") + quote$ + "\n\n"
+					CalculateDamageToStarship(unitsOfDamage)
+				ENDIF
+			ENDIF
+		ENDIF
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION DistanceFun%: x1%, y1%, x2%, y2%
+
+	RETURN INTEGER(SQR(POW(ABS(x2 - x1), 2) + POW(ABS(y2 - y1), 2)))
+
+ENDFUNCTION
+
+FUNCTION GalaxyGlobal%: xSectorGlobal%, ySectorGlobal%
+
+	LOCAL xCluster%
+	LOCAL yCluster%
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL a%
+
+	a = 0
+
+	xCluster = xSectorGlobal
+
+	REPEAT
+		INC a
+		DEC xCluster, 30
+	UNTIL xCluster <= 0
+
+	xCluster = a
+
+	a = 0
+
+	yCluster = ySectorGlobal
+
+	REPEAT
+		INC a
+		DEC yCluster, 10
+	UNTIL yCluster <= 0
+
+	yCluster = a
+
+	xSector = (xSectorGlobal - ((xCluster - 1) * 30))
+	ySector = (ySectorGlobal - ((yCluster - 1) * 10))
+
+	RETURN galaxy[xCluster][yCluster][xSector][ySector]
+
+ENDFUNCTION
+
+FUNCTION GalaxyNebulaGlobal%: xSectorGlobal%, ySectorGlobal%
+
+	LOCAL xCluster%
+	LOCAL yCluster%
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL a%
+
+	a = 0
+
+	xCluster = xSectorGlobal
+
+	REPEAT
+		INC a
+		DEC xCluster, 30
+	UNTIL xCluster <= 0
+
+	xCluster = a
+
+	a = 0
+
+	yCluster = ySectorGlobal
+
+	REPEAT
+		INC a
+		DEC yCluster, 10
+	UNTIL yCluster <= 0
+
+	yCluster = a
+
+	xSector = (xSectorGlobal - ((xCluster - 1) * 30))
+	ySector = (ySectorGlobal - ((yCluster - 1) * 10))
+
+	RETURN galaxyNebula[xCluster][yCluster][xSector][ySector]
+
+ENDFUNCTION
+
+FUNCTION GetClusterX%: xSectorGlobal%
+
+	LOCAL xCluster%
+	LOCAL a%
+
+	a = 0
+
+	xCluster = xSectorGlobal
+
+	REPEAT
+		INC a
+		DEC xCluster, 30
+	UNTIL xCluster <= 0
+
+	RETURN a
+
+ENDFUNCTION
+
+FUNCTION GetClusterY%: ySectorGlobal%
+
+	LOCAL yCluster%
+	LOCAL a%
+
+	a = 0
+
+	yCluster = ySectorGlobal
+
+	REPEAT
+		INC a
+		DEC yCluster, 10
+	UNTIL yCluster <= 0
+
+	RETURN a
+
+ENDFUNCTION
+
+FUNCTION GetCurrentCondition$:
+
+	LOCAL green%
+	LOCAL damTotal%
+	LOCAL a%
+
+	IF ZylonsInCluster(playerPos.xCluster, playerPos.yCluster)
+		RETURN "RED"
+	ELSE
+		green = TRUE
+		IF fuel < 1000 THEN green = FALSE
+		IF powerMain < 1000 THEN green = FALSE
+		IF shields < 1000 THEN green = FALSE
+		IF lifeSupportUnits < 1000 THEN green = FALSE
+		IF crewMembers - casualties < 25 THEN green = FALSE
+		IF stardocksRemaining = 1 THEN green = FALSE
+		IF planetsInhabited - planetsDestroyed = 1 THEN green = FALSE
+		damTotal = 0
+		FOR a = 1 TO 11
+			INC damTotal, 10000 - systems[a]
+		NEXT
+		IF damTotal > 55000 THEN green = FALSE
+		IF green = TRUE
+			RETURN "GREEN"
+		ELSE
+			RETURN "YELLOW"
+		ENDIF
+	ENDIF
+
+ENDFUNCTION
+
+FUNCTION GetLocalSectorX%: xSectorGlobal%
+
+	LOCAL xCluster%
+	LOCAL xSector%
+	LOCAL a%
+
+	a = 0
+
+	xCluster = xSectorGlobal
+
+	REPEAT
+		INC a
+		DEC xCluster, 30
+	UNTIL xCluster <= 0
+
+	xCluster = a
+
+	RETURN xSectorGlobal - ((xCluster - 1) * 30)
+
+ENDFUNCTION
+
+FUNCTION GetLocalSectorY%: ySectorGlobal%
+
+	LOCAL yCluster%
+	LOCAL ySector%
+	LOCAL a%
+
+	a = 0
+
+	yCluster = ySectorGlobal
+
+	REPEAT
+		INC a
+		DEC yCluster, 10
+	UNTIL yCluster <= 0
+
+	yCluster = a
+
+	RETURN ySectorGlobal - ((yCluster - 1) * 10)
+
+ENDFUNCTION
+
+FUNCTION GetSkillLevel$: sk%
+
+	SELECT sk%
+		CASE 2 TO 3
+			RETURN "EASY"
+		CASE 4 TO 5
+			RETURN "NORMAL"
+		CASE 6 TO 9
+			RETURN "HARD"
+	ENDSELECT
+
+ENDFUNCTION
+
+FUNCTION GetQuadrantName$: xCluster%, yCluster%
+
+	IF yCluster < 11
+		IF xCluster < 11
+			RETURN "ALPHA"
+		ELSE
+			RETURN "BETA"
+		ENDIF
+	ELSE
+		IF xCluster < 11
+			RETURN "GAMMA"
+		ELSE
+			RETURN "DELTA"
+		ENDIF
+	ENDIF
+
+ENDFUNCTION
+
+FUNCTION GetSystemName$: sysNum%
+
+	SELECT sysNum%
+		CASE 1
+			RETURN "STANDARD PROPULSION:     "
+		CASE 2
+			RETURN "INTERSTELLAR PROPULSION: "
+		CASE 3
+			RETURN "HYPER-DRIVE:             "
+		CASE 4
+			RETURN "LASERS:                  "
+		CASE 5
+			RETURN "NEUTRON MISSILES:        "
+		CASE 6
+			RETURN "SMART BOMB:              "
+		CASE 7
+			RETURN "CLOAKING DEVICE:         "
+		CASE 8
+			RETURN "ON-BOARD COMPUTER:       "
+		CASE 9
+			RETURN "SCANNERS:                "
+		CASE 10
+			RETURN "COMMUNICATIONS:          "
+		CASE 11
+			RETURN "LIFE SUPPORT:            "
+	ENDSELECT
+
+ENDFUNCTION
+
+FUNCTION Message$: msg$
+
+	// Accepts a message as an argument and garbles or corrupts
+	// it as necessary based on damages to the communications system.
+	// Returns the modified string.
+
+	LOCAL temp$
+	LOCAL a%
+
+	temp$ = ""
+
+	FOR a = 1 TO LEN(msg$)
+		IF RND(9999) + 1 <= systems[SYS_COMM] OR ASC(MID$(msg$, a - 1, 1)) = 32
+			temp$ = temp$ + MID$(msg$, a - 1, 1)
+		ELSE
+			temp$ = temp$ + "?"
+		ENDIF
+	NEXT
+
+	RETURN temp$
+
+ENDFUNCTION
+
+FUNCTION NebulaExistsInCluster%: xCluster%, yCluster%
+
+	LOCAL xSector%
+	LOCAL ySector%
+
+	FOR xSector = 1 TO 30
+		FOR ySector = 1 TO 10
+			IF galaxyNebula[xCluster][yCluster][xSector][ySector] = GAL_NEB_OCCUPIED
+				RETURN 1
+			ENDIF
+		NEXT
+	NEXT
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION Pause%: ms#
+
+	LOCAL start#
+
+	start = GETTIMERALL()
+
+	REPEAT
+	UNTIL GETTIMERALL() - start >= ms
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION PlanetExistsInCluster%: xCluster%, yCluster%
+
+	LOCAL xSector%
+	LOCAL ySector%
+
+	FOR xSector = 1 TO 30
+		FOR ySector = 1 TO 10
+			IF galaxy[xCluster][yCluster][xSector][ySector] = GAL_PLANET
+				RETURN 1
+			ENDIF
+		NEXT
+	NEXT
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION StardockCollateralDamage%: xCluster%, yCluster%, units%, adjustForDistance%
+
+	LOCAL distance%
+	LOCAL a%
+	LOCAL r%
+
+	FOR a = 1 TO stardocksTotal
+		IF stardocks[a].xCluster = xCluster AND stardocks[a].yCluster = yCluster
+			BREAK
+		ENDIF
+	NEXT
+
+	IF adjustForDistance = TRUE
+		distance = DistanceFun(playerPos.xSector, playerPos.ySector, stardocks[a].xSector, stardocks[a].ySector)
+		DEC units, distance * 5
+		IF units < 0 THEN units = 0
+	ENDIF
+
+	IF units >= 1
+		STDOUT " STARDOCK AT SECTOR (" + stardocks[a].xSector + ", " + stardocks[a].ySector + ") HIT WITH COLLATERAL WEAPON FIRE.\n"
+		IF stardocks[a].shields <> 0
+			DEC stardocks[a].shields, units
+			IF stardocks[a].shields >= 0
+				IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+					STDOUT " SHIELDS OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[a].shields / 100.0) + "%.\n\n"
+				ELSE
+					STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON STARDOCK.\n\n"
+				ENDIF
+			ELSE
+				DEC stardocks[a].structInt, ABS(stardocks[a].shields)
+				stardocks[a].shields = 0
+				IF stardocks[a].structInt < 0 THEN stardocks[a].structInt = 0
+				IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+					STDOUT " SHIELDS OF STARDOCK REDUCED TO 0%.\n"
+					STDOUT " STRUCTURAL INTEGRITY OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[a].structInt / 100.0) + "%.\n\n"
+				ELSE
+					STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON STARDOCK.\n\n"
+				ENDIF
+			ENDIF
+		ELSE
+			DEC stardocks[a].structInt, units
+			IF stardocks[a].structInt < 0 THEN stardocks[a].structInt = 0
+			IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+				STDOUT " STRUCTURAL INTEGRITY OF STARDOCK REDUCED TO " + FORMAT$(0, 2, stardocks[a].structInt / 100.0) + "%.\n\n"
+			ELSE
+				STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON STARDOCK.\n\n"
+			ENDIF
+		ENDIF
+	ELSE
+		STDOUT " WEAPON FIRE OBSTRUCTED BY STARDOCK AT SECTOR (" + stardocks[a].xSector + ", " + stardocks[a].ySector + ").\n"
+		IF RND(9999) + 1 <= systems[SYS_SCANNERS]
+			STDOUT " REPORTS INDICATE NO IMPACT UPON THE STARDOCK.\n\n"
+		ELSE
+			STDOUT " SCANNERS UNABLE TO PRODUCE READOUT ON STARDOCK.\n\n"
+		ENDIF
+	ENDIF
+
+	IF stardocks[a].structInt = 0
+		DEC stardocksRemaining
+		galaxy[stardocks[a].xCluster][stardocks[a].yCluster][stardocks[a].xSector][stardocks[a].ySector] = GAL_EMPTY
+		STDCOLOR 12, 0
+		STDOUT " *** STARDOCK DESTROYED ***\n\n"
+		STDCOLOR 10, 0
+		STDOUT " REPORT FROM INTERGALACTIC ALLIANCE HEADQUARTERS:\n\n"
+		r = RND(4)
+		SELECT r
+			CASE 0
+				STDOUT " " + quote$ + Message$("THAT'S DEFINITELY NOT THE INTENDED TARGET, CAPTAIN!") + quote$ + "\n\n"
+			CASE 1
+				STDOUT " " + quote$ + Message$("KEEP THAT UP AND YOU WILL DEFINITELY FAIL IN YOUR MISSION!") + quote$ + "\n\n"
+			CASE 2
+				STDOUT " " + quote$ + Message$("PERHAPS YOU NEED MORE TACTICAL TRAINING, CAPTAIN.") + quote$ + "\n\n"
+			CASE 3
+				STDOUT " " + quote$ + Message$("HIT THE ZYLONS, CAPTAIN, NOT THE STARDOCKS!") + quote$ + "\n\n"
+			CASE 4
+				STDOUT " " + quote$ + Message$("CAPTAIN, ARE YOU A BIT CONFUSED AS TO WHO THE ENEMY IS?") + quote$ + "\n\n"
+		ENDSELECT
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION StardockExistsInCluster%: xCluster%, yCluster%
+
+	LOCAL xSector%
+	LOCAL ySector%
+
+	FOR xSector = 1 TO 30
+		FOR ySector = 1 TO 10
+			IF galaxy[xCluster][yCluster][xSector][ySector] = GAL_STARDOCK
+				RETURN 1
+			ENDIF
+		NEXT
+	NEXT
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION StarsInCluster%: xCluster%, yCluster%
+
+	LOCAL xSector%
+	LOCAL ySector%
+	LOCAL count%
+
+	count = 0
+
+	FOR xSector = 1 TO 30
+		FOR ySector = 1 TO 10
+			IF galaxy[xCluster][yCluster][xSector][ySector] = GAL_STAR
+				INC count
+			ENDIF
+		NEXT
+	NEXT
+
+	RETURN count
+
+ENDFUNCTION
+
+FUNCTION TotalSectorsAsteroids%: xCluster%, yCluster%
+
+	LOCAL count%
+	LOCAL x%
+	LOCAL y%
+
+	count = 0
+
+	FOR x = 1 TO 30
+		FOR y = 1 TO 10
+			IF galaxy[xCluster][yCluster][x][y] = GAL_ASTEROID THEN INC count
+		NEXT
+	NEXT
+
+	RETURN count
+
+ENDFUNCTION
+
+FUNCTION TotalSectorsNebula%: xCluster%, yCluster%
+
+	LOCAL count%
+	LOCAL x%
+	LOCAL y%
+
+	count = 0
+
+	FOR x = 1 TO 30
+		FOR y = 1 TO 10
+			IF galaxyNebula[xCluster][yCluster][x][y] = GAL_NEB_OCCUPIED THEN INC count
+		NEXT
+	NEXT
+
+	RETURN count
+
+ENDFUNCTION
+
+FUNCTION ZylonCloak%: z%
+
+	// This will handle cloaking AND de-cloaking of Zylon vessels.
+
+	IF zylons[z].structInt = 0 OR zylons[z].cloakEnergy = 0 THEN RETURN 0
+
+	IF zylons[z].cloakEngaged = FALSE
+		IF zylons[z].cloakEnergy <> 0
+			IF RND(99) + 1 <= 3
+				zylons[z].cloakEngaged = TRUE
+			ENDIF
+		ENDIF
+	ELSE
+		IF RND(99) + 1 <= 20
+			zylons[z].cloakEngaged = FALSE
+			IF zylons[z].xCluster = playerPos.xCluster AND zylons[z].yCluster = playerPos.yCluster
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("CAPTAIN, ENEMY ZYLON VESSEL DE-CLOAKING IN THIS CLUSTER.") + quote$ + "\n\n"
+			ENDIF
+		ENDIF
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION ZylonIdle%: z%
+
+	IF zylons[z].structInt = 0 THEN RETURN 0
+
+	DEC zylons[z].fuel, RND(4) + 1
+	IF zylons[z].fuel < 0 THEN zylons[z].fuel = 0
+
+	IF zylons[z].cloakEngaged = TRUE
+		DEC zylons[z].cloakEnergy, RND(4) + 1
+		IF zylons[z].cloakEnergy < 0 THEN zylons[z].cloakEnergy = 0
+		IF zylons[z].cloakEnergy = 0
+			zylons[z].cloakEngaged = FALSE
+			IF zylons[z].xCluster = playerPos.xCluster AND zylons[z].yCluster = playerPos.yCluster
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("CAPTAIN, ENEMY ZYLON VESSEL DE-CLOAKING IN THIS CLUSTER.") + quote$ + "\n\n"
+			ENDIF
+		ENDIF
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION ZylonIsCloaked%: xCluster%, yCluster%, xSector%, ySector%
+
+	LOCAL a%
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].xCluster = xCluster AND zylons[a].yCluster = yCluster
+			IF zylons[a].xSector = xSector AND zylons[a].ySector = ySector
+				IF zylons[a].cloakEngaged = TRUE
+					RETURN TRUE
+				ELSE
+					RETURN FALSE
+				ENDIF
+			ENDIF
+		ENDIF
+	NEXT
+
+ENDFUNCTION
+
+FUNCTION ZylonMove%: z%
+
+	LOCAL xStartGlobal%
+	LOCAL yStartGlobal%
+	LOCAL xDestGlobal%
+	LOCAL yDestGlobal%
+	LOCAL xClusterOld%
+	LOCAL yClusterOld%
+	LOCAL okay%
+
+	IF zylons[z].structInt = 0 OR zylons[z].fuel = 0 THEN RETURN 0
+
+	xStartGlobal = (30 * (zylons[z].xCluster - 1)) + (zylons[z].xSector)
+	yStartGlobal = (10 * (zylons[z].yCluster - 1)) + (zylons[z].ySector)
+
+	REPEAT
+		okay = TRUE
+		REPEAT
+			REPEAT
+				REPEAT
+					xDestGlobal = RND(599) + 1
+					yDestGlobal = RND(199) + 1
+				UNTIL xDestGlobal <> xStartGlobal OR yDestGlobal <> yStartGlobal
+			UNTIL ABS(xDestGlobal - xStartGlobal) <= 150 AND ABS(yDestGlobal - yStartGlobal) <= 50
+		UNTIL GalaxyGlobal(xDestGlobal, yDestGlobal) = GAL_EMPTY AND GalaxyNebulaGlobal(xDestGlobal, yDestGlobal) = GAL_NEB_EMPTY
+		FOR x = xDestGlobal - 1 TO xDestGlobal + 1
+			FOR y = yDestGlobal - 1 TO yDestGlobal + 1
+				IF x >= 1 AND x <= 600 AND y >=1 AND y <= 200 AND x <> xDestGlobal AND y <> yDestGlobal
+					IF GalaxyGlobal(x, y) = GAL_ASTEROID OR GalaxyNebulaGlobal(x, y) = GAL_NEB_OCCUPIED
+						okay = FALSE
+						BREAK
+					ENDIF
+				ENDIF
+			NEXT
+			IF okay = FALSE THEN BREAK
+		NEXT
+	UNTIL okay = TRUE
+
+	galaxy[zylons[z].xCluster][zylons[z].yCluster][zylons[z].xSector][zylons[z].ySector] = GAL_EMPTY
+
+	xClusterOld = zylons[z].xCluster
+	yClusterOld = zylons[z].yCluster
+
+	zylons[z].xCluster = GetClusterX(xDestGlobal)
+	zylons[z].yCluster = GetClusterY(yDestGlobal)
+	zylons[z].xSector = GetLocalSectorX(xDestGlobal)
+	zylons[z].ySector = GetLocalSectorY(yDestGlobal)
+
+	galaxy[zylons[z].xCluster][zylons[z].yCluster][zylons[z].xSector][zylons[z].ySector] = GAL_ZYLON
+
+	DEC zylons[z].fuel, (RND(19) + 1) * DistanceFun(xStartGlobal, yStartGlobal, xDestGlobal, yDestGlobal)
+	IF zylons[z].fuel < 0 THEN zylons[z].fuel = 0
+	IF zylons[z].cloakEngaged = TRUE
+		DEC zylons[z].cloakEnergy, (RND(19) + 1) * DistanceFun(xStartGlobal, yStartGlobal, xDestGlobal, yDestGlobal)
+		IF zylons[z].cloakEnergy < 0 THEN zylons[z].cloakEnergy = 0
+		IF zylons[z].cloakEnergy = 0 THEN zylons[z].cloakEngaged = FALSE
+	ENDIF
+
+	IF xClusterOld = playerPos.xCluster AND yClusterOld = playerPos.yCluster
+		IF zylons[z].xCluster <> playerPos.xCluster OR zylons[z].yCluster <> playerPos.yCluster
+			IF zylons[z].cloakEngaged = FALSE
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("CAPTAIN, ENEMY ZYLON VESSEL LEAVING CURRENT CLUSTER.") + quote$ + "\n\n"
+			ENDIF
+		ENDIF
+	ENDIF
+
+	IF zylons[z].xCluster = playerPos.xCluster AND zylons[z].yCluster = playerPos.yCluster
+		IF xClusterOld <> playerPos.xCluster OR yClusterOld <> playerPos.yCluster
+			IF zylons[z].cloakEngaged = FALSE
+				STDOUT " REPORT FROM TACTICAL:\n"
+				STDOUT "\n"
+				STDOUT " " + quote$ + Message$("CAPTAIN, ENEMY ZYLON VESSEL ENTERING CURRENT CLUSTER.") + quote$ + "\n\n"
+			ENDIF
+		ENDIF
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION ZylonRecharge%: z%
+
+	// This routine handles recharging of Zylon systems.
+	// Actually there's only one that does, the pulse cannon banks.
+
+	IF zylons[z].structInt = 0 THEN RETURN 0
+
+	IF zylons[z].pulseUnits < 10000
+		INC zylons[z].pulseUnits, 50
+		IF zylons[z].pulseUnits > 10000 THEN zylons[z].pulseUnits = 10000
+	ENDIF
+
+	RETURN 0
+
+ENDFUNCTION
+
+FUNCTION ZylonsInCluster%: xCluster%, yCluster%
+
+	LOCAL count%
+	LOCAL a%
+
+	count = 0
+
+	FOR a = 1 TO zylonsTotal
+		IF zylons[a].structInt <> 0
+			IF zylons[a].cloakEngaged = FALSE
+				IF zylons[a].xCluster = xCluster AND zylons[a].yCluster = yCluster
+					INC count
+				ENDIF
+			ENDIF
+		ENDIF
+	NEXT
+
+	RETURN count
+
+ENDFUNCTION
