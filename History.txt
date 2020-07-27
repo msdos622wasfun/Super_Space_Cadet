@@ -1,0 +1,22 @@
+============
+VERSION 1.00
+============
+
+Initial release.
+
+============
+VERSION 1.01
+============
+
+Prepped the app for submission to GitHub.
+
+============
+VERSION 1.02
+============
+
+When a scan is displayed, the X and Y coordinates are now displayed on the top and left margins.
+
+When refueling actions are taken, the computer now displays how many units are needed to reach maximum capacity.
+
+The COM submenu can be displayed again by typing '?'.
+

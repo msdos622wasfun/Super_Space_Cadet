@@ -3,7 +3,7 @@
 // Start: Monday, August 29, 2016
 // IDE Version: 14.001
 //
-// Super Space Cadet v1.01
+// Super Space Cadet v1.02
 // Copyleft 2020 by Erich Kohl
 // All Rights Reserved
 //
@@ -229,7 +229,7 @@ SUB Begin:
 	GOSUB PressAnyKey
 
 	STDOUT "\n\n"
-	STDOUT " Super Space Cadet v1.01\n"
+	STDOUT " Super Space Cadet v1.02\n"
 	STDOUT " Copyleft 2020 by Erich Kohl\n"
 	STDOUT " All Rights Reserved\n"
 	STDOUT "\n"
@@ -319,6 +319,8 @@ SUB Command_Computer:
 	STDOUT " (5) MISSILE TRAJECTORY CALCULATOR\n"
 	STDOUT " (6) POLAR ANGLE DIAGRAM\n"
 	STDOUT " (7) CANCEL\n\n"
+
+	STDOUT " TYPE '?' TO DISPLAY LIST AGAIN\n\n"
 
 	REPEAT
 		REPEAT
@@ -549,6 +551,16 @@ SUB Command_Computer:
 			STDOUT "               /  |  \\   \n"
 			STDOUT "            225  270  315 \n"
 			STDOUT "\n"
+		ELSEIF subCmd$ = "?"
+			STDOUT " AVAILABLE SUBCOMMANDS:\n\n"
+			STDOUT " (1) GALACTIC QUADRANT SCAN RECORDS\n"
+			STDOUT " (2) MAP OF THE GALAXY -- QUADRANT LAYOUTS\n"
+			STDOUT " (3) MAP OF THE GALAXY -- CLUSTER PAIRS WITHIN QUADRANT\n"
+			STDOUT " (4) LOCATION OF ALL STARDOCKS\n"
+			STDOUT " (5) MISSILE TRAJECTORY CALCULATOR\n"
+			STDOUT " (6) POLAR ANGLE DIAGRAM\n"
+			STDOUT " (7) CANCEL\n\n"
+			STDOUT " TYPE '?' TO DISPLAY LIST AGAIN\n\n"
 		ELSE
 			IF subCmd$ <> "7"
 				// TODO: Make sure the following is updated as more commands are added.
@@ -2043,7 +2055,7 @@ SUB Command_Refuel:
 				IF fuel = 10000
 					STDOUT " FUEL ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " FUEL CURRENTLY AT " + fuel + " UNIT(S).\n\n"
+					STDOUT " FUEL CURRENTLY AT " + fuel + " UNIT(S); " + (10000 - fuel) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2069,7 +2081,7 @@ SUB Command_Refuel:
 				IF powerMain = 10000
 					STDOUT " MAIN POWER ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " MAIN POWER CURRENTLY AT " + powerMain + " UNIT(S).\n\n"
+					STDOUT " MAIN POWER CURRENTLY AT " + powerMain + " UNIT(S); " + (10000 - powerMain) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2095,7 +2107,7 @@ SUB Command_Refuel:
 				IF shields = 10000
 					STDOUT " SHIELDS ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " SHIELDS CURRENTLY AT " + shields + " UNIT(S).\n\n"
+					STDOUT " SHIELDS CURRENTLY AT " + shields + " UNIT(S); " + (10000 - shields) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2121,7 +2133,7 @@ SUB Command_Refuel:
 				IF laserUnits = 10000
 					STDOUT " LASER BANKS ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " LASER BANKS CURRENTLY AT " + laserUnits + " UNIT(S).\n\n"
+					STDOUT " LASER BANKS CURRENTLY AT " + laserUnits + " UNIT(S); " + (10000 - laserUnits) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2149,7 +2161,7 @@ SUB Command_Refuel:
 				ELSEIF stardocks[s].refuelCap < 4000
 					STDOUT " INSUFFICIENT CAPACITY ON STARDOCK TO REPLENISH MISSILE BANKS.\n\n"
 				ELSE
-					STDOUT " NEUTRON MISSILE BANK INVENTORY CURRENTLY AT " + missiles + ".\n\n"
+					STDOUT " NEUTRON MISSILE BANK INVENTORY CURRENTLY AT " + missiles + " OUT OF 5.\n\n"
 					REPEAT
 						STDOUT " ENTER NUMBER OF MISSILES DESIRED (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2175,7 +2187,7 @@ SUB Command_Refuel:
 				IF cloakEnergy = 10000
 					STDOUT " CLOAK ENERGY ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " CLOAKING ENERGY CURRENTLY AT " + cloakEnergy + " UNIT(S).\n\n"
+					STDOUT " CLOAKING ENERGY CURRENTLY AT " + cloakEnergy + " UNIT(S); " + (10000 - cloakEnergy) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2201,7 +2213,7 @@ SUB Command_Refuel:
 				IF lifeSupportUnits = 10000
 					STDOUT " LIFE SUPPORT ALREADY AT MAXIMUM.\n\n"
 				ELSE
-					STDOUT " LIFE SUPPORT CURRENTLY AT " + lifeSupportUnits + " UNIT(S).\n\n"
+					STDOUT " LIFE SUPPORT CURRENTLY AT " + lifeSupportUnits + " UNIT(S); " + (10000 - lifeSupportUnits) + " UNIT(S) TO MAXIMUM CAPACITY.\n\n"
 					REPEAT
 						STDOUT " ENTER AMOUNT TO REPLENISH IN UNITS (0 TO CANCEL): "
 						inputString$ = STDIN$()
@@ -2748,10 +2760,11 @@ SUB Command_Scan:
 			STDOUT "\n"
 			BREAK
 		ELSEIF scanMethod$ = "2"
-			STDOUT " Z+PAN*:Z+PAN*:Z+PAN*\n"
-			STDOUT " ------:------:------\n"
+			STDOUT "      " + FORMAT$(2, 0, playerPos.xCluster - 1) + "     " + FORMAT$(2, 0, playerPos.xCluster) + "     " + FORMAT$(2, 0, playerPos.xCluster + 1) + "\n"
+			STDOUT "    Z+PAN*:Z+PAN*:Z+PAN*\n"
+			STDOUT "    ------:------:------\n"
 			FOR y = playerPos.yCluster - 1 TO playerPos.yCluster + 1
-				STDOUT " "
+				STDOUT " " + FORMAT$(2, 0, y) + " "
 				FOR x = playerPos.xCluster - 1 TO playerPos.xCluster + 1
 					IF x >= 1 AND x <= 20 AND y >= 1 AND y <= 20
 						bGround = 0
@@ -2818,15 +2831,16 @@ SUB Command_Scan:
 				NEXT
 				STDOUT "\n"
 				STDCOLOR 10, 0
-				STDOUT " ------:------:------\n"
+				STDOUT "    ------:------:------\n"
 			NEXT
 			STDOUT "\n"
 			BREAK
 		ELSEIF scanMethod$ = "3"
-			STDOUT " Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*\n"
-			STDOUT " ------:------:------:------:------\n"
+			STDOUT "      " + FORMAT$(2, 0, playerPos.xCluster - 2) + "     " + FORMAT$(2, 0, playerPos.xCluster - 1) + "     " + FORMAT$(2, 0, playerPos.xCluster) + "     " + FORMAT$(2, 0, playerPos.xCluster + 1) + "     " + FORMAT$(2, 0, playerPos.xCluster + 2) + "\n"
+			STDOUT "    Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*:Z+PAN*\n"
+			STDOUT "    ------:------:------:------:------\n"
 			FOR y = playerPos.yCluster - 2 TO playerPos.yCluster + 2
-				STDOUT " "
+				STDOUT " " + FORMAT$(2, 0, y) + " "
 				FOR x = playerPos.xCluster - 2 TO playerPos.xCluster + 2
 					IF x >= 1 AND x <= 20 AND y >= 1 AND y <= 20
 						bGround = 0
@@ -2889,7 +2903,7 @@ SUB Command_Scan:
 				NEXT
 				STDOUT "\n"
 				STDCOLOR 10, 0
-				STDOUT " ------:------:------:------:------\n"
+				STDOUT "    ------:------:------:------:------\n"
 			NEXT
 			STDOUT "\n"
 			BREAK
@@ -4529,7 +4543,7 @@ ENDSUB
 
 SUB Version:
 
-	STDOUT " Version 1.01\n\n"
+	STDOUT " Version 1.02\n\n"
 
 	STDOUT " Press any key to return to the main menu..."
 
